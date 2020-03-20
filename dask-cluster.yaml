@@ -1,0 +1,63 @@
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: devito-server
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: devito-server
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+      - name: devito-server
+        image: devitoaks.azurecr.io/devito-base:v2
+        command: ['/venv/bin/dask-scheduler']
+        ports:
+        - containerPort: 8786
+          name: devito-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devito-server
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8786
+  selector:
+    app: devito-server
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: devito-worker
+spec:
+  replicas: 10
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  minReadySeconds: 5 
+  template:
+    metadata:
+      labels:
+        app: devito-worker
+    spec:
+      nodeSelector:
+        "beta.kubernetes.io/os": linux
+      containers:
+      - name: devito-worker
+        env:
+        - name: PYTHONPATH
+          value: /app
+        - name: DEVITO_OPENMP
+          value: "1"
+        - name: OMP_PROC_BIND
+          value: "TRUE"
+        image: devitoaks.azurecr.io/devito-base:v2
+        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786']
+        ports:
+        - containerPort: 80
