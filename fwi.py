@@ -69,8 +69,7 @@ def fwi_gradient(vp_in, model, geometry, *args):
 
 
 def fwi_gradient_single_shot(vp_in, shot_id):
-    with profiler.get_timer('io', 'load_models'):
-        model_data = load_blob_to_hdf5("models", filename)
+    model_data = load_blob_to_hdf5("models", filename)
     model = from_hdf5(model_data, datakey="m0", dtype=np.float32, space_order=2,
                   nbpml=40)
     grad = Function(name="grad", grid=model.grid)
@@ -78,17 +77,14 @@ def fwi_gradient_single_shot(vp_in, shot_id):
     residual = Receiver(name='rec', grid=model.grid,
                         time_range=geometry.time_axis,
                         coordinates=geometry.rec_positions)
-    with profiler.get_timer('reshape', 'vec2mat'):
-        vp_in = vec2mat(vp_in)
+    vp_in = vec2mat(vp_in)
 
     assert(model.vp.shape == vp_in.shape)
     vp.data[:] = vp_in[:]
 
-    with profiler.get_timer('io', 'load_shot'):
-        true_d, src_coords = load_shot(shot_id)
+    true_d, src_coords = load_shot(shot_id)
 
-    with profiler.get_timer('solve', 'setup'):
-        solver = overthrust_setup(model_data, src_coordinates=src_coords,
+    solver = overthrust_setup(model_data, src_coordinates=src_coords,
                                   datakey="m0", tn=tn, nbpml=nbpml)
 
     u0 = TimeFunction(name='u', grid=model.grid, time_order=2, space_order=4,

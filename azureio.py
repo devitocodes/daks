@@ -12,11 +12,6 @@ def load_model(model_name, datakey):
         data = f[datakey][()]
     return data
 
-def load_shot(shot_id):
-    with load_blob_to_hdf5("models", model_name) as f:
-        data = f[datakey][()]
-    return data
-
 def save_shot(shot_id, data, src_coords):
     bio = io.BytesIO()
     with h5py.File(bio, 'w') as f:
