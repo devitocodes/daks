@@ -13,7 +13,7 @@ spec:
         "beta.kubernetes.io/os": linux
       containers:
       - name: devito-server
-        image: devitoaks.azurecr.io/devito-base:v2
+        image: devitoaks.azurecr.io/devito-base:v4
         command: ['/venv/bin/dask-scheduler']
         ports:
         - containerPort: 8786
@@ -35,7 +35,7 @@ kind: Deployment
 metadata:
   name: devito-worker
 spec:
-  replicas: 10
+  replicas: 2
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -57,7 +57,12 @@ spec:
           value: "1"
         - name: OMP_PROC_BIND
           value: "TRUE"
-        image: devitoaks.azurecr.io/devito-base:v2
+        image: devitoaks.azurecr.io/devito-base:v4
         command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786']
+        resources:
+          requests:
+            memory: "5G"
+          limits:
+            memory: "5G"
         ports:
         - containerPort: 80

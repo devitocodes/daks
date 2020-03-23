@@ -20,8 +20,15 @@ tn = 4000
 nshots = 10
 nbpml = 40
 profiler = Profiler()
+print("Connecting to scheduler")
 client = Client('51.11.43.137:8786')
-
+print("Uploading python modules")
+print("util.py")
+client.upload_file('util.py')
+print("azureio.py")
+client.upload_file('azureio.py')
+print("simple.py")
+client.upload_file('simple.py')
 
 def load_shot(shot_id):
     with load_blob_to_hdf5("shots", "shot_%s.h5"%str(shot_id)) as f:
@@ -103,7 +110,7 @@ def fwi_gradient_single_shot(vp_in, shot_id):
 def fwi_gradient_dask(vp_in, *args):
     futures = []
     for i in range(nshots):
-        futures.append(client.submit(fwi_gradient_single_shot, vp_in, i))
+        futures.append(client.submit(fwi_gradient_single_shot, np.array(vp_in), i))
 
     wait(futures)
 
