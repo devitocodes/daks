@@ -13,11 +13,13 @@ spec:
         "beta.kubernetes.io/os": linux
       containers:
       - name: devito-server
-        image: devitoaks.azurecr.io/devito-base:v4
+        image: devitoaks.azurecr.io/devito-base:v5
         command: ['/venv/bin/dask-scheduler']
         ports:
         - containerPort: 8786
           name: devito-server
+        - containerPort: 8787
+          name: daskdashboard
 ---
 apiVersion: v1
 kind: Service
@@ -26,7 +28,12 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-  - port: 8786
+  - name: aaa
+    port: 8786
+    targetPort: 8786
+  - name: bbb
+    port: 8787
+    targetPort: 8787
   selector:
     app: devito-server
 ---
@@ -57,12 +64,7 @@ spec:
           value: "1"
         - name: OMP_PROC_BIND
           value: "TRUE"
-        image: devitoaks.azurecr.io/devito-base:v4
+        image: devitoaks.azurecr.io/devito-base:v5
         command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786']
-        resources:
-          requests:
-            memory: "5G"
-          limits:
-            memory: "5G"
         ports:
         - containerPort: 80

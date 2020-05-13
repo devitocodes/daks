@@ -4,7 +4,7 @@ import numpy as np
 from azure.storage.blob import BlockBlobService
 
 azure_config = {'account_name': "navdaks",
-                    "account_key": "<NOT MY KEY>"}
+                    "account_key": ""}
 
 
 def load_model(model_name, datakey):
