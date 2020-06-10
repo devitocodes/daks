@@ -2,7 +2,7 @@
 For seismic imaging, the repository shows how you can leverage open-source PDE solver [Devito](https://www.devitoproject.org/), to perform Full-Waveform Inversion (FWI) at scale on Azure using Dask and k8s  
 
 Steps to run:
-1. Build the docker image: `docker-compose build` should create the Dockerfile. 
+1. Build the docker image: `docker-compose build` should create the docker image. 
 2. Tag and upload the built image to ACR - note the name of the image. 
 3. Update `dask-cluster.yaml` to use this docker image for both the scheduler and worker. 
 4. Do the background to provision a kubernetes cluster and have `kubectl` working on it. 
