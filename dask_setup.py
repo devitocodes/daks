@@ -2,7 +2,7 @@ import os
 from distributed import Client
 
 
-files_to_upload = ['azureio.py', 'fwiio.py', 'solvers.py', 'overthrust.py', ]
+files_to_upload = ['azureio.py', 'fwiio.py', 'solvers.py', 'overthrust.py', 'util.py', 'dask_setup.py', 'fwi.py']
 
 def setup_dask():
     if "DASK_SERVER_IP" not in os.environ:

@@ -39,7 +39,7 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, ke
     
     path_prefix = os.path.dirname(os.path.realpath(__file__))
     dtype = np.float32
-    model, geometry, bounds = initial_setup(path_prefix, initial_model_filename, tn, dtype, so, nbl)
+    model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl)
 
     solver_params = {'filename': initial_model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
                          'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing}
@@ -85,8 +85,8 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, ke
     to_hdf5(final_model, '%s_final.h5' % output_filename)
 
 
-def initial_setup(path_prefix, filename, tn, dtype, space_order, nbl):
-    model = overthrust_model_iso(path_prefix+"/"+filename, datakey="m0",
+def initial_setup(filename, tn, dtype, space_order, nbl):
+    model = overthrust_model_iso(filename, datakey="m0",
                       dtype=dtype, space_order=space_order, nbl=nbl)
 
     geometry = create_geometry(model, tn)
@@ -155,10 +155,9 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
     futures = []
     
     for i in range(nshots):
-        futures.append(fwi_gradient_shot(vp_in, i, solver_params))
-        #futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, solver_params,
-        #                             resources = {'tasks':1} # Ensure one task per worker (to run two, tasks=0.5)
-        #                                 ))
+        futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, solver_params,
+                                     resources = {'tasks':1} # Ensure one task per worker (to run two, tasks=0.5)
+                                         ))
 
     shape = model.shape
     
@@ -172,14 +171,14 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
             grad += g
         return objective, grad
 
-    #reduce_future = client.submit(reduce, *futures)
-    #wait(reduce_future)
-    from functools import reduce
-    objective, grad = reduce(reduction, futures)
-    #objective, grad = reduce_future.result()
+    reduce_future = client.submit(reduction, *futures)
+    wait(reduce_future)
+
+    objective, grad = reduce_future.result()
+
     # Scipy LBFGS misbehaves if type is not float64
     grad = mat2vec(np.array(grad)).astype(np.float64)
-    print(objective, np.linalg.norm(grad))
+
     return objective, grad
 
 
@@ -243,7 +242,7 @@ def fwi_gradient_checkpointed(vp_in, model, geometry, n_checkpoints=1000,
         with profiler.get_timer('solve', 'reverse'):
             wrp.apply_reverse()
         print(wrp.profiler.summary())
-    # grad.data[:] /= np.max(np.abs(grad.data[:]))
+
     return objective, -np.ravel(grad.data).astype(np.float64)
 
 
@@ -256,10 +255,10 @@ def mat2vec(mat):
     return np.ravel(mat)
 
 
-def vec2mat(vec, model):
-    if vec.shape == model.shape:
+def vec2mat(vec, shape):
+    if vec.shape == shape:
         return vec
-    return np.reshape(vec, model.shape)
+    return np.reshape(vec, shape)
 
 
 def fncallback(vec):
