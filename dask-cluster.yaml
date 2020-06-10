@@ -13,7 +13,7 @@ spec:
         "beta.kubernetes.io/os": linux
       containers:
       - name: devito-server
-        image: devitoaks.azurecr.io/devito-base:v5
+        image: devitoaks.azurecr.io/daks-base:v1
         command: ['/venv/bin/dask-scheduler']
         ports:
         - containerPort: 8786
@@ -64,7 +64,7 @@ spec:
           value: "1"
         - name: OMP_PROC_BIND
           value: "TRUE"
-        image: devitoaks.azurecr.io/devito-base:v5
-        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786']
+        image: devitoaks.azurecr.io/daks-base:v1
+        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '0', '--resources', 'tasks=1']
         ports:
         - containerPort: 80

@@ -1,0 +1,25 @@
+version: '2'
+
+services:
+
+  daks:
+
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: daks-base
+
+    environment:
+      DEVITO_ARCH: gcc
+      DEVITO_LANGUAGE: openmp
+      DASK_SERVER_IP: 52.183.222.12
+
+    volumes:
+      - ~/Work/Development/devito/devito:/app/devito
+      - ~/Work/Development/devito/tests:/app/tests
+      - ~/Work/Development/devito/examples:/app/examples
+      - ~/Work/papers/error_propagation:/app/error_propagation
+      - ~/Work/kubernetes/daks:/app/daks
+
+    ports:
+      - 8888:8888

@@ -1,41 +1,29 @@
-import h5py
-import numpy as np
-
-from examples.seismic import Model
-
-
-def from_hdf5(f, **kwargs):
-    if not type(f) is h5py.File:
-        f = h5py.File(f, 'r')
-    origin = kwargs.pop('origin', None)
-    if origin is None:
-        origin_key = kwargs.pop('origin_key', 'o')
-        origin = f[origin_key]
-
-    spacing = kwargs.pop('spacing', None)
-    if spacing is None:
-        spacing_key = kwargs.pop('spacing_key', 'd')
-        spacing = f[spacing_key]
-    nbpml = kwargs.pop('nbpml', 20)
-    datakey = kwargs.pop('datakey', None)
-    if datakey is None:
-        raise ValueError("datakey must be known - what is the name of the" +
-                         "data in the file?")
-    space_order = kwargs.pop('space_order', None)
-    dtype = kwargs.pop('dtype', None)
-    data_m = f[datakey][()]
-    data_vp = np.sqrt(1/data_m).astype(dtype)
-
-    if len(data_vp.shape) > 2:
-        data_vp = np.transpose(data_vp, (1, 2, 0))
-    else:
-        data_vp = np.transpose(data_vp, (1, 0))
-    shape = data_vp.shape
-    return Model(space_order=space_order, vp=data_vp, origin=origin,
-                 shape=shape, dtype=dtype, spacing=spacing, nbpml=nbpml)
-
 from timeit import default_timer
+import h5py
 
+
+def write_results(data, results_file):
+    hostname = socket.gethostname()
+    if not os.path.isfile(results_file):
+        write_header = True
+    else:
+        write_header = False
+
+    data['hostname'] = hostname
+    fieldnames = list(data.keys())
+    with open(results_file, 'a') as fd:
+        writer = csv.DictWriter(fd, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(data)
+
+        
+def to_hdf5(data, filename, datakey='data', additional=None):
+    with h5py.File(filename, 'w') as f:
+        f.create_dataset(datakey, data=data, dtype=data.dtype)
+        if additional is not None:
+            for k, v in additional.items():
+                f.create_dataset(k, data=v, dtype=v.dtype)
 
 class Timer(object):
     def __init__(self, profiler, section, action):
@@ -96,3 +84,11 @@ class Profiler(object):
 
         return results
 
+def exception_handler(orig_func):
+  def wrapper(*args,**kwargs):
+    try:
+      return orig_func(*args,**kwargs)
+    except:
+      import sys
+      sys.exit(1)
+  return wrapper
