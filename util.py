@@ -1,5 +1,6 @@
 from timeit import default_timer
 import h5py
+import numpy as np
 
 
 def write_results(data, results_file):
@@ -92,3 +93,17 @@ def exception_handler(orig_func):
       import sys
       sys.exit(1)
   return wrapper
+
+
+def mat2vec(mat):
+    return np.ravel(mat)
+
+
+def vec2mat(vec, shape):
+    if vec.shape == shape:
+        return vec
+    return np.reshape(vec, shape)
+
+
+def clip_boundary_and_numpy(mat, nbl):
+    return np.array(mat.data[:])[nbl:-nbl, nbl:-nbl]

@@ -46,6 +46,8 @@ def test_vec2mat():
 
     assert(np.array_equal(mat, vec2mat(vec, shape)))
 
+# ToTest: initial_setup, mat2vec, fwi_gradient_shot, clip_boundary_and_numpy
+
 
 if __name__ == "__main__":
     test_equivalence_local_remote_single_shot()
