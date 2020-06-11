@@ -28,7 +28,8 @@ def run(model_filename, tn, nshots, so, nbl):
 
     solver_params = {'filename': model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm',
                          'nbl': nbl}
-    
+
+    print("Generating shots")
     futures = []
     for i in range(nshots):
         src_coords = np.empty((1, 2), dtype=np.float32)
@@ -38,13 +39,16 @@ def run(model_filename, tn, nshots, so, nbl):
         futures.append(client.submit(generate_shot, i, src_coords, solver_params))
 
     wait(futures)
-
-    # TODO Check that the futures succeeded
-
-    print("Successfully generated %d shots and uploaded to Azure blob storage" % nshots)
+    results = [f.result() for f in futures]
+    
+    if all(results):
+        print("Successfully generated %d shots and uploaded to Azure blob storage" % nshots)
+    else:
+        raise Error("Some error occurred. Please check remote logs (currently logs can't come to local system)")
 
 
 def generate_shot(shot_id, src_coords, solver_params):
+
     solver_params['src_coordinates'] = src_coords
 
     filename = solver_params.pop('filename')
@@ -54,8 +58,9 @@ def generate_shot(shot_id, src_coords, solver_params):
     model_data.close()
 
     rec, u, _ = solver.forward()
-    save_shot(shot_id, rec.data, src_coords)
-
+    dt = solver.geometry.dt
+    save_shot(shot_id, rec.data, src_coords, dt)
+    return True
 
 if __name__ == "__main__":
     run()

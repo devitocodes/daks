@@ -10,13 +10,15 @@ def load_shot(num):
     with load_blob_to_hdf5(basepath, filename) as f:
         data = f['data'][()]
         src_coords = f['src_coords'][()]
-    return data, src_coords
+        dt = f['dt'][()]
+    return data, src_coords, dt
 
-def save_shot(shot_id, data, src_coords):
+def save_shot(shot_id, data, src_coords, dt):
     bio = io.BytesIO()
     with h5py.File(bio, 'w') as f:
         f['data'] = data
         f['src_coords'] = src_coords
+        f['dt'] = dt
     
     blob_from_bytes("shots", "shot_%s.h5"%str(shot_id), bio.getvalue())
 

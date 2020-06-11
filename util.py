@@ -1,3 +1,4 @@
+from scipy import interpolate
 from timeit import default_timer
 import h5py
 import numpy as np
@@ -107,3 +108,26 @@ def vec2mat(vec, shape):
 
 def clip_boundary_and_numpy(mat, nbl):
     return np.array(mat.data[:])[nbl:-nbl, nbl:-nbl]
+
+
+def reinterpolate(shot, new_nt, old_dt, order=3):
+    old_nt, ntraces = shot.shape
+
+    if old_nt == new_nt:
+        return shot
+    
+    old_tn = float(old_nt*old_dt)
+
+    new_dt = old_tn/new_nt
+
+    new_shot = np.zeros((new_nt, ntraces))
+
+    oldt = np.array([i*new_dt for i in range(old_nt)])
+    newt = np.array([i*new_dt for i in range(new_nt)])
+
+    for i in range(ntraces):
+        tck = interpolate.splrep(oldt, shot[:, i], s=0, k=order)
+        new_shot[:, i] = interpolate.splev(newt, tck)
+
+    return new_shot
+

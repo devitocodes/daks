@@ -13,7 +13,7 @@ from examples.checkpointing.checkpoint import (CheckpointOperator,
 from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
 
 from scipy.optimize import minimize, Bounds
-from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat
+from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
 from pyrevolve import Revolver
 from dask_setup import setup_dask
 from azureio import load_blob_to_hdf5
@@ -57,12 +57,13 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, ke
 
     clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl))
 
-
+    fwi_iteration = 0.
+    
     def callback(vec):
-        global iter
-        iter += 1
-        global global_ofile
-        filename = "%s_%d.h5" % (global_ofile, iter)
+        global fwi_iteration
+        fwi_iteration += 1
+        global final_solution_basename
+        filename = "%s_%d.h5" % (final_solution_basename, fwi_iteration)
         with profiler.get_timer('io', 'write_progress'):
             to_hdf5(vec2mat(vec, model.shape), filename)
         print(profiler.summary())
@@ -72,7 +73,7 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, ke
                                args=tuple(f_args),
                                jac=True, method='L-BFGS-B',
                                callback=callback, bounds=bounds,
-                               options={'disp': True, 'maxiter': 60, 'gtol': 0.})
+                               options={'disp': True, 'maxiter': 60})
 
     final_model = vec2mat(solution_object.x, model.shape)
 
@@ -122,10 +123,16 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     origin = solver_params['origin']
     spacing = solver_params['spacing']
     
-    true_d, source_location = load_shot(i)
+    true_d, source_location, old_dt = load_shot(i)
     
-    model = Model(vp=vp_in, nbl=nbl,space_order=space_order, dtype=dtype, shape=vp_in.shape, origin=origin, spacing=spacing)
+    model = Model(vp=vp_in, nbl=nbl,space_order=space_order, dtype=dtype, shape=vp_in.shape,
+                  origin=origin, spacing=spacing, bcs="damp")
     geometry = create_geometry(model, tn, source_location)
+
+    error("tn: %d, nt: %d, dt: %f.2" % (geometry.tn, geometry.nt, geometry.dt))
+
+    error("Reinterpolate shot from %d samples to %d samples" % (true_d.shape[0], geometry.nt))
+    true_d = reinterpolate(true_d, geometry.nt, old_dt)
     
     solver = AcousticWaveSolver(model, geometry, kernel='OT2',nbl=nbl,
                                 space_order=space_order, dtype=dtype)
@@ -143,7 +150,7 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     error("Forward prop")
     smooth_d, _, _ = solver.forward(save=True, u=u0)
     error("Misfit")
-    
+    error("Observed data shape: %s, Simulated data shape: %s" % (str(true_d.shape), str(smooth_d.shape)))
     residual.data[:] = smooth_d.data[:] - true_d[:]
 
     objective = .5*np.linalg.norm(residual.data.ravel())**2
@@ -160,7 +167,6 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
     f_vp_in = client.scatter(vp_in) # Dask enforces this for large arrays
     assert(model.shape == vp_in.shape)
 
-    
     futures = []
     
     for i in range(nshots):
