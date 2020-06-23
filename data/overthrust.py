@@ -1,31 +1,36 @@
 import numpy as np
 import h5py
-from examples.seismic import (Receiver, TimeAxis, RickerSource,
-                              AcquisitionGeometry, Model)
+
+from examples.seismic import AcquisitionGeometry, Model
 from examples.seismic.acoustic import AcousticWaveSolver
-from solvers import DensityWaveSolver, DensityModel
-from devito.logger import error
+
+from azureio import load_hdf5_from_blob
 from fwiio import Blob
+from solvers import DensityWaveSolver, DensityModel
 
 
 def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
-                     space_order=2, datakey='m0', nbl=40, dtype=np.float32,
-                     **kwargs):
-    model = overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype)
+                          so=2, datakey='m0', nbl=40, dtype=np.float32,
+                          **kwargs):
+    model = overthrust_model_iso(h5_file, datakey, so, nbl, dtype)
 
     geometry = create_geometry(model, tn, src_coordinates)
-    
+
     solver = AcousticWaveSolver(model, geometry, kernel=kernel,
-                                space_order=space_order, **kwargs)
+                                space_order=so, **kwargs)
     return solver
 
-def overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype):
-    model_params = from_hdf5(h5_file, datakey, space_order=space_order, nbl=nbl, dtype=dtype, bcs="damp")
+
+def overthrust_model_iso(h5_file, datakey, so, nbl, dtype):
+    model_params = from_hdf5(h5_file, datakey, space_order=so, nbl=nbl,
+                             dtype=dtype, bcs="damp")
 
     return Model(**model_params)
 
+
 def overthrust_model_density(h5_file, datakey, space_order, nbl, dtype):
-    model_params = from_hdf5(h5_file, datakey, space_order=space_order, nbl=nbl, dtype=dtype, bcs="damp")
+    model_params = from_hdf5(h5_file, datakey, space_order=space_order,
+                             nbl=nbl, dtype=dtype, bcs="damp")
     data_vp = model_params['vp']
     data_rho = 0.31 * (1e3*data_vp)**0.25
     data_irho = 1/data_rho
@@ -35,13 +40,14 @@ def overthrust_model_density(h5_file, datakey, space_order, nbl, dtype):
 
 
 def overthrust_solver_density(h5_file, tn=4000, src_coordinates=None,
-                     space_order=2, datakey='m0', nbl=40, dtype=np.float32,
-                     **kwargs):
-    model = overthrust_model_density(h5_file, datakey, space_order, nbl, dtype)
-    
+                              so=2, datakey='m0', nbl=40, dtype=np.float32,
+                              **kwargs):
+    model = overthrust_model_density(h5_file, datakey, so, nbl, dtype)
+
     geometry = create_geometry(model, tn, src_coordinates)
-    
-    solver = DensityWaveSolver(model, geometry, space_order=space_order, **kwargs)
+
+    solver = DensityWaveSolver(model, geometry, space_order=so,
+                               **kwargs)
     return solver
 
 
@@ -68,8 +74,14 @@ def create_geometry(model, tn, src_coordinates=None):
 
 
 def from_hdf5(f, datakey, **kwargs):
-    if not type(f) is h5py.File:
+    if type(f) is Blob:
+        f = load_hdf5_from_blob(f.container, f.filename)
+        close = True
+    elif not type(f) is h5py.File:
         f = h5py.File(f, 'r')
+        close = True
+    else:
+        close = False
 
     if datakey is None:
         raise ValueError("datakey must be known - what is the name of the" +
@@ -77,11 +89,10 @@ def from_hdf5(f, datakey, **kwargs):
     model_params = kwargs
 
     dtype = model_params.get('dtype')
-    
+
     data_m = f[datakey][()]
     data_vp = np.sqrt(1/data_m).astype(dtype)
-    
-    
+
     if len(data_vp.shape) > 2:
         data_vp = np.transpose(data_vp, (1, 2, 0))
     else:
@@ -90,14 +101,16 @@ def from_hdf5(f, datakey, **kwargs):
     model_params['vp'] = data_vp
 
     model_params['shape'] = data_vp.shape
-    
+
     if "origin" not in model_params:
         origin_key = model_params.pop('origin_key', 'o')
         model_params['origin'] = f[origin_key]
 
-    
     if "spacing" not in model_params:
         spacing_key = model_params.pop('spacing_key', 'd')
         model_params['spacing'] = f[spacing_key]
-    
+
+    if close:
+        f.close()
+
     return model_params
