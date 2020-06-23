@@ -42,7 +42,7 @@ kind: Deployment
 metadata:
   name: devito-worker
 spec:
-  replicas: 20
+  replicas: 15
   strategy:
     rollingUpdate:
       maxSurge: 1
@@ -60,16 +60,20 @@ spec:
         env:
         - name: PYTHONPATH
           value: /app
-        - name: DEVITO_OPENMP
-          value: "1"
+        - name: DEVITO_LANGUAGE
+          value: "openmp"
         - name: OMP_PROC_BIND
           value: "TRUE"
+        - name: "OMP_PLACES"
+          value: "cores"
         image: devitoaks.azurecr.io/daks-base:v1
-        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '0', '--resources', 'tasks=1', '--no-nanny']
+        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '4G', '--resources', 'tasks=1', '--no-nanny', '--nprocs', '1', '--nthreads', '1']
         ports:
         - containerPort: 80
         resources:
           requests:
-            memory: 4G
+            memory: 5G
+            cpu: 2
           limits:
-            memory: 4G
+            memory: 5G
+            cpu: 2
