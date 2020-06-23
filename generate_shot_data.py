@@ -1,6 +1,6 @@
 import numpy as np
 import click
-from overthrust import overthrust_model_density, overthrust_solver_density
+from overthrust import overthrust_model_density, overthrust_solver_density, overthrust_model_iso, overthrust_solver_iso
 from azureio import load_blob_to_hdf5, create_container
 from fwiio import save_shot
 from distributed import wait
@@ -13,21 +13,21 @@ from dask_setup import setup_dask
 @click.option("--nshots", default=20, type=int, help="Number of shots (already decided when generating shots)")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
-def run(model_filename, tn, nshots, so, nbl):
+@click.option("--container", default="shots", type=str, help="Name of container to store generated shots")
+def run(model_filename, tn, nshots, so, nbl, container):
     dtype = np.float32
     model_data = load_blob_to_hdf5("models", model_filename)
     model = overthrust_model_density(model_data, datakey="m", dtype=dtype, space_order=so, nbl=nbl)
     model_data.close()
     spacing = model.spacing
 
-    basename = "shots"
-    create_container(basename)
+    create_container(container)
 
     src_locations = np.linspace(0, model.domain_size[0], nshots)
     client = setup_dask()
 
     solver_params = {'filename': model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm',
-                         'nbl': nbl}
+                         'nbl': nbl, 'container': container}
 
     print("Generating shots")
     futures = []
@@ -42,7 +42,7 @@ def run(model_filename, tn, nshots, so, nbl):
     results = [f.result() for f in futures]
     
     if all(results):
-        print("Successfully generated %d shots and uploaded to Azure blob storage" % nshots)
+        print("Successfully generated %d shots and uploaded to blob storage container %s" % (nshots, container))
     else:
         raise Error("Some error occurred. Please check remote logs (currently logs can't come to local system)")
 
@@ -52,6 +52,8 @@ def generate_shot(shot_id, src_coords, solver_params):
     solver_params['src_coordinates'] = src_coords
 
     filename = solver_params.pop('filename')
+
+    container = solver_params.pop('container')
     
     model_data = load_blob_to_hdf5("models", filename)
     solver = overthrust_solver_density(model_data, **solver_params)
@@ -59,7 +61,7 @@ def generate_shot(shot_id, src_coords, solver_params):
 
     rec, u, _ = solver.forward()
     dt = solver.geometry.dt
-    save_shot(shot_id, rec.data, src_coords, dt)
+    save_shot(shot_id, rec.data, src_coords, dt, container=container)
     return True
 
 if __name__ == "__main__":
