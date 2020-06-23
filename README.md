@@ -13,3 +13,4 @@ Steps to run:
 9. `cd daks`
 10. `make shots.blob` - this downloads the 3D Overthrust Model from SLIM group's FTP server (thanks to them for providing this) to the local directory, extracts a 2D slice, uploads the 2D slice to blob storage, and then runs the shot generation script that reads from blob storage directly on the k8s cluster and writes shot data to blob storage directly. 
 11. You should now have blobs named `shot_0.h5` to `shot_19.h5` (for default nshots=20, can be passed as a command-line parameter to `python generate_shot_data.py --nshots <NUMBER>`) in a container called `shots` in your blob storage account. 
+12. `python fwi.py` (or `make fwi`) - this will run fwi using the shots generated previously. 
