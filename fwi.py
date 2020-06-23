@@ -4,6 +4,7 @@ from util import write_results, to_hdf5
 import numpy as np
 import h5py
 import os
+import time
 from devito import Function, TimeFunction, clear_cache
 from devito.logger import error
 from examples.seismic import AcquisitionGeometry, Receiver, Model
@@ -11,7 +12,7 @@ from examples.seismic.acoustic import AcousticWaveSolver
 from examples.checkpointing.checkpoint import (CheckpointOperator,
                                                DevitoCheckpoint)
 from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
-
+from functools import partial
 from scipy.optimize import minimize, Bounds
 from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
 from pyrevolve import Revolver
@@ -27,6 +28,7 @@ profiler = Profiler()
 @click.option("--final-solution-basename", default="fwi", help="Filename for the final solution")
 @click.option("--tn", default=4000, type=int, help="Number of timesteps to run")
 @click.option("--nshots", default=20, type=int, help="Number of shots (already decided when generating shots)")
+@click.option("--shots-container", default="shots", type=str, help="Name of container to read shots from")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
 @click.option("--kernel", default="OT2", help="Computation kernel to use (options: OT2, OT4)")
@@ -34,16 +36,14 @@ profiler = Profiler()
 @click.option("--n-checkpoints", default=1000, type=int, help="Number of checkpoints to use")
 @click.option("--compression", default=None, type=click.Choice([None, 'zfp', 'sz', 'blosc']), help="Compression scheme to use (checkpointing must be enabled to use compression)")
 @click.option("--tolerance", default=None, type=int, help="Error tolerance for lossy compression, used as 10^-t")
-def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, kernel, checkpointing, n_checkpoints, compression, tolerance):
+def run(initial_model_filename, final_solution_basename, tn, nshots, shots_container, so, nbl, kernel, checkpointing, n_checkpoints, compression, tolerance):
     
-    path_prefix = os.path.dirname(os.path.realpath(__file__))
     dtype = np.float32
     model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl)
 
     solver_params = {'filename': initial_model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                         'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing}
+                         'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing, 'shots_container': shots_container}
     client = setup_dask()
-    #Client(processes = False, n_workers=1, memory_limit=None, threads_per_worker=None, resources = {'tasks':1}) #
     f_args = [model, geometry, nshots, client, solver_params]
     
     if checkpointing:
@@ -57,22 +57,25 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, ke
 
     clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl))
 
-    fwi_iteration = 0.
+    fwi_iteration = 0
     
-    def callback(vec):
-        global fwi_iteration
-        fwi_iteration += 1
-        global final_solution_basename
+    def callback(final_solution_basename, vec):
+        callback.call_count += 1
+        fwi_iteration = callback.call_count
         filename = "%s_%d.h5" % (final_solution_basename, fwi_iteration)
         with profiler.get_timer('io', 'write_progress'):
             to_hdf5(vec2mat(vec, model.shape), filename)
         print(profiler.summary())
+
+    callback.call_count = 0
+
+    partial_callback = partial(callback, final_solution_basename)
         
     solution_object = minimize(f_g,
                                clipped_vp,
                                args=tuple(f_args),
                                jac=True, method='L-BFGS-B',
-                               callback=callback, bounds=bounds,
+                               callback=partial_callback, bounds=bounds,
                                options={'disp': True, 'maxiter': 60})
 
     final_model = vec2mat(solution_object.x, model.shape)
@@ -80,8 +83,9 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, ke
     true_model = overthrust_model_iso("overthrust_3D_true_model_2D.h5",
                            datakey="m", dtype=dtype, space_order=so,
                            nbl=nbl)
+    true_model_vp = clip_boundary_and_numpy(true_model.vp.data, true_model.nbl)
 
-    error_norm = np.linalg.norm(true_model.vp.data - final_model)
+    error_norm = np.linalg.norm(true_model_vp - final_model)
     print(error_norm)
 
     data = {'error_norm': error_norm,
@@ -95,8 +99,8 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, so, nbl, ke
     to_hdf5(final_model, '%s_final.h5' % output_filename)
 
 
-def initial_setup(filename, tn, dtype, space_order, nbl):
-    model = overthrust_model_iso(filename, datakey="m0",
+def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
+    model = overthrust_model_iso(filename, datakey=datakey,
                       dtype=dtype, space_order=space_order, nbl=nbl)
 
     geometry = create_geometry(model, tn)
@@ -122,10 +126,12 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     dtype = solver_params['dtype']
     origin = solver_params['origin']
     spacing = solver_params['spacing']
+
+    shots_container = solver_params['shots_container']
     
-    true_d, source_location, old_dt = load_shot(i)
-    
-    model = Model(vp=vp_in, nbl=nbl,space_order=space_order, dtype=dtype, shape=vp_in.shape,
+    true_d, source_location, old_dt = load_shot(i, container=shots_container)
+    print(str(spacing), str(origin), str(vp_in.shape))
+    model = Model(vp=vp_in, nbl=nbl, space_order=space_order, dtype=dtype, shape=vp_in.shape,
                   origin=origin, spacing=spacing, bcs="damp")
     geometry = create_geometry(model, tn, source_location)
 
@@ -162,7 +168,7 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     return objective, -grad
 
 def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
-
+    start_time = time.time()
     vp_in = vec2mat(vp_in, model.shape)
     f_vp_in = client.scatter(vp_in) # Dask enforces this for large arrays
     assert(model.shape == vp_in.shape)
@@ -190,10 +196,12 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
     wait(reduce_future)
 
     objective, grad = reduce_future.result()
+    elapsed_time = time.time() - start_time
+    print("Objective function evaluation completed in %f seconds" % elapsed_time)
 
     # Scipy LBFGS misbehaves if type is not float64
     grad = mat2vec(np.array(grad)).astype(np.float64)
-
+    
     return objective, grad
 
 
