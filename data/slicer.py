@@ -1,7 +1,5 @@
 from argparse import ArgumentParser
 import h5py
-import numpy as np
-import matplotlib.pyplot as plt
 
 
 description = ("Slice a 3D Model into a 2D model")
@@ -33,4 +31,3 @@ with h5py.File(filename, 'r') as ifile:
         ofile.create_dataset(datakey, data=m_sliced)
         ofile.create_dataset('o', data=o_sliced)
         ofile.create_dataset('d', data=d_sliced)
-
