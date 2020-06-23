@@ -5,11 +5,12 @@ from examples.seismic import (Receiver, TimeAxis, RickerSource,
 from examples.seismic.acoustic import AcousticWaveSolver
 from solvers import DensityWaveSolver, DensityModel
 from devito.logger import error
+from fwiio import Blob
+
 
 def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
                      space_order=2, datakey='m0', nbl=40, dtype=np.float32,
                      **kwargs):
-    error(str(kwargs))
     model = overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype)
 
     geometry = create_geometry(model, tn, src_coordinates)

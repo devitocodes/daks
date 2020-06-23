@@ -11,7 +11,7 @@ from examples.seismic import AcquisitionGeometry, Receiver, Model
 from examples.seismic.acoustic import AcousticWaveSolver
 from examples.checkpointing.checkpoint import (CheckpointOperator,
                                                DevitoCheckpoint)
-from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
+from data.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
 from functools import partial
 from scipy.optimize import minimize, Bounds
 from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
@@ -43,7 +43,9 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
 
     solver_params = {'filename': initial_model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
                          'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing, 'shots_container': shots_container}
+
     client = setup_dask()
+    
     f_args = [model, geometry, nshots, client, solver_params]
     
     if checkpointing:
@@ -156,7 +158,6 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     error("Forward prop")
     smooth_d, _, _ = solver.forward(save=True, u=u0)
     error("Misfit")
-    error("Observed data shape: %s, Simulated data shape: %s" % (str(true_d.shape), str(smooth_d.shape)))
     residual.data[:] = smooth_d.data[:] - true_d[:]
 
     objective = .5*np.linalg.norm(residual.data.ravel())**2

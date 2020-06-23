@@ -27,6 +27,7 @@ def to_hdf5(data, filename, datakey='data', additional=None):
             for k, v in additional.items():
                 f.create_dataset(k, data=v, dtype=v.dtype)
 
+
 class Timer(object):
     def __init__(self, profiler, section, action):
         self.timer = default_timer

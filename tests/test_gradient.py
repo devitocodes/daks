@@ -9,7 +9,7 @@ from fwi import initial_setup, fwi_gradient_shot
 from fwiio import load_shot
 from dask_setup import setup_dask
 from util import mat2vec, clip_boundary_and_numpy, vec2mat
-from overthrust import overthrust_solver_iso
+from data.overthrust import overthrust_solver_iso
 
 
 class TestGradient(object):
@@ -42,7 +42,7 @@ class TestGradient(object):
 
         true_model_filename = "overthrust_3D_true_model_2D.h5"
 
-        shots_container = "shots-iso"
+        shots_container = "shots-rho"
 
         shot_id = 1
 
@@ -63,6 +63,8 @@ class TestGradient(object):
 
         dm = np.float64(v_t**(-2) - v0**(-2))
 
+        print("dm", np.linalg.norm(dm), dm.shape)
+
         F0, gradient = fwi_gradient_shot(vec2mat(v0, model0.shape), shot_id, solver_params)
         
         G = np.dot(gradient.reshape(-1), dm.reshape(-1))
@@ -76,15 +78,17 @@ class TestGradient(object):
             def initializer(data):
                 data[:] = np.sqrt(v0**2 * v_t**2 /
                                   ((1 - H[i]) * v_t**2 + H[i] * v0**2))
+                print("data", np.linalg.norm(data), H[i])
             vloc = Function(name='vloc', grid=model0.grid, space_order=so,
                             initializer=initializer)
             # Data for the new model
             d = solver.forward(vp=vloc)[0]
             # First order error Phi(m0+dm) - Phi(m0)
-            F_i = .5*linalg.norm((d.data - rec.data).reshape(-1))**2
+            F_i = .5*linalg.norm((d.data - rec).reshape(-1))**2
             error1[i] = np.absolute(F_i - F0)
             # Second order term r Phi(m0+dm) - Phi(m0) - <J(m0)^T \delta d, dm>
             error2[i] = np.absolute(F_i - F0 - H[i] * G)
+            print(i, F0, F_i, H[i]*G)
 
         # Test slope of the  tests
         p1 = np.polyfit(np.log10(H), np.log10(error1), 1)

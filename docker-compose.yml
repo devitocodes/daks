@@ -12,7 +12,7 @@ services:
     environment:
       DEVITO_ARCH: gcc
       DEVITO_LANGUAGE: openmp
-      DASK_SERVER_IP: 52.183.222.12
+      DASK_SERVER_IP: 52.150.44.6
 
     volumes:
       - ~/Work/Development/devito/devito:/app/devito

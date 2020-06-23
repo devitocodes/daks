@@ -2,7 +2,7 @@ import numpy as np
 import click
 from overthrust import overthrust_model_density, overthrust_solver_density, overthrust_model_iso, overthrust_solver_iso
 from azureio import load_blob_to_hdf5, create_container
-from fwiio import save_shot
+from fwiio import save_shot, Blob
 from distributed import wait
 from dask_setup import setup_dask
 
@@ -15,30 +15,25 @@ from dask_setup import setup_dask
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
 @click.option("--container", default="shots", type=str, help="Name of container to store generated shots")
 def run(model_filename, tn, nshots, so, nbl, container):
+    
     dtype = np.float32
-    model_data = load_blob_to_hdf5("models", model_filename)
-    model = overthrust_model_density(model_data, datakey="m", dtype=dtype, space_order=so, nbl=nbl)
-    model_data.close()
-    spacing = model.spacing
+
+    model = overthrust_model_density(Blob("models", model_filename), datakey="m", dtype=dtype, space_order=so, nbl=nbl)
 
     create_container(container)
 
-    src_locations = np.linspace(0, model.domain_size[0], nshots)
     client = setup_dask()
 
-    solver_params = {'filename': model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm',
-                         'nbl': nbl, 'container': container}
+    solver_params = {'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm', 'nbl': nbl}
 
+    src_coords = get_source_locations(model, nshots, dtype)
+    
     print("Generating shots")
-    futures = []
-    for i in range(nshots):
-        src_coords = np.empty((1, 2), dtype=np.float32)
-        src_coords[0, 0] = model.origin[0] + src_locations[i]
-        src_coords[0, 1] = model.origin[1] + 2*spacing[1]
 
-        futures.append(client.submit(generate_shot, i, src_coords, solver_params))
+    futures = client.map(generate_shot, enumerate(src_coords), solver_params=solver_params, container=container, filename=model_filename) 
 
     wait(futures)
+
     results = [f.result() for f in futures]
     
     if all(results):
@@ -46,22 +41,26 @@ def run(model_filename, tn, nshots, so, nbl, container):
     else:
         raise Error("Some error occurred. Please check remote logs (currently logs can't come to local system)")
 
+        
+def get_source_locations(model, nshots, dtype):
+    spacing = model.spacing
+    src_locations = np.linspace(0, model.domain_size[0], nshots)
+    src_coords = np.empty((nshots, 2), dtype=dtype)
+    for i in range(nshots):
+        src_coords[i, 0] = model.origin[0] + src_locations[i]
+        src_coords[i, 1] = model.origin[1] + 2*spacing[1]
+    return src_coords
 
-def generate_shot(shot_id, src_coords, solver_params):
+
+def generate_shot((shot_id, src_coords), solver_params, filename, container):
 
     solver_params['src_coordinates'] = src_coords
-
-    filename = solver_params.pop('filename')
-
-    container = solver_params.pop('container')
     
-    model_data = load_blob_to_hdf5("models", filename)
-    solver = overthrust_solver_density(model_data, **solver_params)
-    model_data.close()
+    solver = overthrust_solver_density(Blob("models", filename), **solver_params)
 
     rec, u, _ = solver.forward()
-    dt = solver.geometry.dt
-    save_shot(shot_id, rec.data, src_coords, dt, container=container)
+    
+    save_shot(shot_id, rec.data, src_coords, solver.geometry.dt, container=container)
     return True
 
 if __name__ == "__main__":
