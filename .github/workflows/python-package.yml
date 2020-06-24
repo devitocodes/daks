@@ -37,5 +37,6 @@ jobs:
     - name: Test with pytest
       run: |
         DASK_SERVER_IP=52.150.44.6 python generate_shot_data.py
+        make overthrust_3D_initial_model_2D.h5
         DASK_SERVER_IP=52.150.44.6 python fwi.py
         python tests/test_gradient.py
