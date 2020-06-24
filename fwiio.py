@@ -20,8 +20,8 @@ def save_shot(shot_id, data, src_coords, dt, container="shots"):
         f['src_coords'] = src_coords
         f['dt'] = dt
 
-    blob_from_bytes(Blob(container, "shot_%s.h5" % str(shot_id),
-                    bio.getvalue()))
+    blob_from_bytes(Blob(container, "shot_%s.h5" % str(shot_id)),
+                    bio.getvalue())
 
 
 def load_model(model_name, datakey):

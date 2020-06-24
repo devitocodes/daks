@@ -11,7 +11,7 @@ from examples.seismic import AcquisitionGeometry, Receiver, Model
 from examples.seismic.acoustic import AcousticWaveSolver
 from examples.checkpointing.checkpoint import (CheckpointOperator,
                                                DevitoCheckpoint)
-from data.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
+from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
 from functools import partial
 from scipy.optimize import minimize, Bounds
 from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
@@ -137,7 +137,7 @@ def fwi_gradient_shot(vp_in, i, solver_params):
                   origin=origin, spacing=spacing, bcs="damp")
     geometry = create_geometry(model, tn, source_location)
 
-    error("tn: %d, nt: %d, dt: %f.2" % (geometry.tn, geometry.nt, geometry.dt))
+    error("tn: %d, nt: %d, dt: %f" % (geometry.tn, geometry.nt, geometry.dt))
 
     error("Reinterpolate shot from %d samples to %d samples" % (true_d.shape[0], geometry.nt))
     true_d = reinterpolate(true_d, geometry.nt, old_dt)

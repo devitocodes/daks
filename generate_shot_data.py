@@ -30,7 +30,7 @@ def run(model_filename, tn, nshots, so, nbl, container):
     
     print("Generating shots")
 
-    futures = client.map(generate_shot, enumerate(src_coords), solver_params=solver_params, container=container, filename=model_filename) 
+    futures = client.map(generate_shot, list(enumerate(src_coords)), solver_params=solver_params, container=container, filename=model_filename) 
 
     wait(futures)
 
@@ -52,8 +52,8 @@ def get_source_locations(model, nshots, dtype):
     return src_coords
 
 
-def generate_shot((shot_id, src_coords), solver_params, filename, container):
-
+def generate_shot(shot_info, solver_params, filename, container):
+    shot_id, src_coords = shot_info
     solver_params['src_coordinates'] = src_coords
     
     solver = overthrust_solver_density(Blob("models", filename), **solver_params)
