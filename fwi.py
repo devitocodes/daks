@@ -15,7 +15,6 @@ from scipy.optimize import minimize, Bounds
 from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
 from dask_setup import setup_dask
 from fwiio import load_shot
-from fwi_checkpointed import fwi_gradient_checkpointed
 
 
 profiler = Profiler()
@@ -48,13 +47,14 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
 
     f_args = [model, geometry, nshots, client, solver_params]
 
-    if checkpointing:
-        f_g = fwi_gradient_checkpointed
-        compression_params = {'scheme': compression, 'tolerance': 10**(-tolerance)}
-        f_args.append(n_checkpoints)
-        f_args.append(compression_params)
-    else:
-        f_g = fwi_gradient
+    # if checkpointing:
+    #    f_g = fwi_gradient_checkpointed
+    #    compression_params = {'scheme': compression, 'tolerance': 10**(-tolerance)}
+    #    f_args.append(n_checkpoints)
+    #    f_args.append(compression_params)
+    # else:
+
+    f_g = fwi_gradient
 
     clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl))
 
