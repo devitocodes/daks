@@ -4,20 +4,20 @@ import h5py
 from examples.seismic import AcquisitionGeometry, Model
 from examples.seismic.acoustic import AcousticWaveSolver
 
-from azureio import load_hdf5_from_blob
+from azureio import load_blob_to_hdf5
 from fwiio import Blob
 from solvers import DensityWaveSolver, DensityModel
 
 
 def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
-                          so=2, datakey='m0', nbl=40, dtype=np.float32,
+                          space_order=2, datakey='m0', nbl=40, dtype=np.float32,
                           **kwargs):
-    model = overthrust_model_iso(h5_file, datakey, so, nbl, dtype)
+    model = overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype)
 
     geometry = create_geometry(model, tn, src_coordinates)
 
     solver = AcousticWaveSolver(model, geometry, kernel=kernel,
-                                space_order=so, **kwargs)
+                                space_order=space_order, **kwargs)
     return solver
 
 
@@ -40,13 +40,13 @@ def overthrust_model_density(h5_file, datakey, space_order, nbl, dtype):
 
 
 def overthrust_solver_density(h5_file, tn=4000, src_coordinates=None,
-                              so=2, datakey='m0', nbl=40, dtype=np.float32,
+                              space_order=2, datakey='m0', nbl=40, dtype=np.float32,
                               **kwargs):
-    model = overthrust_model_density(h5_file, datakey, so, nbl, dtype)
+    model = overthrust_model_density(h5_file, datakey, space_order, nbl, dtype)
 
     geometry = create_geometry(model, tn, src_coordinates)
 
-    solver = DensityWaveSolver(model, geometry, space_order=so,
+    solver = DensityWaveSolver(model, geometry, space_order=space_order,
                                **kwargs)
     return solver
 
@@ -75,7 +75,7 @@ def create_geometry(model, tn, src_coordinates=None):
 
 def from_hdf5(f, datakey, **kwargs):
     if type(f) is Blob:
-        f = load_hdf5_from_blob(f.container, f.filename)
+        f = load_blob_to_hdf5(f.container, f.filename)
         close = True
     elif not type(f) is h5py.File:
         f = h5py.File(f, 'r')
@@ -104,11 +104,11 @@ def from_hdf5(f, datakey, **kwargs):
 
     if "origin" not in model_params:
         origin_key = model_params.pop('origin_key', 'o')
-        model_params['origin'] = f[origin_key]
+        model_params['origin'] = f[origin_key][()]
 
     if "spacing" not in model_params:
         spacing_key = model_params.pop('spacing_key', 'd')
-        model_params['spacing'] = f[spacing_key]
+        model_params['spacing'] = f[spacing_key][()]
 
     if close:
         f.close()

@@ -132,7 +132,7 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     shots_container = solver_params['shots_container']
     
     true_d, source_location, old_dt = load_shot(i, container=shots_container)
-    print(str(spacing), str(origin), str(vp_in.shape))
+    
     model = Model(vp=vp_in, nbl=nbl, space_order=space_order, dtype=dtype, shape=vp_in.shape,
                   origin=origin, spacing=spacing, bcs="damp")
     geometry = create_geometry(model, tn, source_location)

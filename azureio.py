@@ -4,7 +4,7 @@ import numpy as np
 from azure.storage.blob import BlockBlobService
 
 azure_config = {'account_name': "navjot",
-                    "account_key": "<NOT MY KEY>"}
+                    "account_key": "<KEY>"}
 
 def get_blob_service():
     account_name = azure_config['account_name']
