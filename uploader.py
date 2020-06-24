@@ -9,7 +9,7 @@ def upload_with_progressbar(filename, container, blob_name):
         def update(done, total):
             pbar.update(done/total)
         upload_file_to_blob(filename, container, blob_name, progress_callback=update)
-    
+
 
 @click.command()
 @click.option('--filename', help='The file to upload')
@@ -18,11 +18,12 @@ def upload_with_progressbar(filename, container, blob_name):
 def run(filename, container, blob_name):
     try:
         upload_with_progressbar(filename, container, blob_name)
-    except AzureMissingResourceHttpError as e:
-        print("Container %s does not exist. Creating..."%container)
+    except AzureMissingResourceHttpError:
+        print("Container %s does not exist. Creating..." % container)
         create_container(container)
         print("Created container. Trying again")
         upload_with_progressbar(filename, container, blob_name)
+
 
 if __name__ == '__main__':
     run()

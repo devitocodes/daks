@@ -7,8 +7,7 @@ from examples.seismic import Model, Receiver
 from examples.seismic.acoustic import AcousticWaveSolver
 from overthrust import overthrust_solver_iso, overthrust_model_iso, create_geometry
 from fwi import initial_setup
-from fwiio import load_shot
-from util import mat2vec, clip_boundary_and_numpy, vec2mat, reinterpolate
+from util import mat2vec, clip_boundary_and_numpy, vec2mat
 
 
 class TestGradient(object):
@@ -50,9 +49,8 @@ class TestGradient(object):
         model_t = overthrust_model_iso(true_model_filename, datakey="m",
                                        dtype=dtype, space_order=so, nbl=nbl)
 
-        _, geometry, _ = initial_setup(initial_model_filename, tn, dtype, so
-                                           , nbl, datakey="m0")
-        #rec, source_location, old_dt = load_shot(shot_id,
+        _, geometry, _ = initial_setup(initial_model_filename, tn, dtype, so, nbl, datakey="m0")
+        # rec, source_location, old_dt = load_shot(shot_id,
         #                                         container=shots_container)
         source_location = geometry.src_positions
         solver_params = {'h5_file': initial_model_filename, 'tn': tn,
@@ -77,8 +75,6 @@ class TestGradient(object):
 
         v_t = mat2vec(clip_boundary_and_numpy(model_t.vp.data, model_t.nbl))
 
-        
-
         dm = np.float64(v_t**(-2) - v0**(-2))
 
         print("dm", np.linalg.norm(dm), dm.shape)
@@ -95,9 +91,9 @@ class TestGradient(object):
         for i in range(0, 7):
             # Add the perturbation to the model
             vloc = np.sqrt(v0**2 * v_t**2 /
-                                  ((1 - H[i]) * v_t**2 + H[i] * v0**2))
+                           ((1 - H[i]) * v_t**2 + H[i] * v0**2))
             m = Model(vp=vloc, nbl=nbl, space_order=so, dtype=dtype, shape=model0.shape,
-                  origin=model0.origin, spacing=model0.spacing, bcs="damp")
+                      origin=model0.origin, spacing=model0.spacing, bcs="damp")
             # Data for the new model
             d = solver.forward(vp=m.vp)[0]
             # First order error Phi(m0+dm) - Phi(m0)
@@ -120,6 +116,7 @@ class TestGradient(object):
         assert np.isclose(p1[0], 1.0, rtol=0.1)
         assert np.isclose(p2[0], 2.0, rtol=0.1)
 
+
 def fwi_gradient_shot(vp_in, i, solver_params, source_location):
     error("Initialising solver")
     tn = solver_params['tn']
@@ -129,9 +126,9 @@ def fwi_gradient_shot(vp_in, i, solver_params, source_location):
     origin = solver_params['origin']
     spacing = solver_params['spacing']
     true_model_filename = "overthrust_3D_true_model_2D.h5"
-    shots_container = solver_params['shots_container']
-    
-    #true_d, source_location, old_dt = load_shot(i, container=shots_container)
+    # shots_container = solver_params['shots_container']
+
+    # true_d, source_location, old_dt = load_shot(i, container=shots_container)
 
     true_solver_params = solver_params.copy()
 
@@ -141,17 +138,17 @@ def fwi_gradient_shot(vp_in, i, solver_params, source_location):
     solver_true = overthrust_solver_iso(**true_solver_params)
 
     true_d, _, _ = solver_true.forward()
-    
+
     model = Model(vp=vp_in, nbl=nbl, space_order=space_order, dtype=dtype, shape=vp_in.shape,
                   origin=origin, spacing=spacing, bcs="damp")
     geometry = create_geometry(model, tn, source_location)
 
     error("tn: %d, nt: %d, dt: %f" % (geometry.tn, geometry.nt, geometry.dt))
 
-    #error("Reinterpolate shot from %d samples to %d samples" % (true_d.shape[0], geometry.nt))
-    #true_d = reinterpolate(true_d, geometry.nt, old_dt)
-    
-    solver = AcousticWaveSolver(model, geometry, kernel='OT2',nbl=nbl,
+    # error("Reinterpolate shot from %d samples to %d samples" % (true_d.shape[0], geometry.nt))
+    # true_d = reinterpolate(true_d, geometry.nt, old_dt)
+
+    solver = AcousticWaveSolver(model, geometry, kernel='OT2', nbl=nbl,
                                 space_order=space_order, dtype=dtype)
 
     grad = Function(name="grad", grid=model.grid)
@@ -162,7 +159,6 @@ def fwi_gradient_shot(vp_in, i, solver_params, source_location):
 
     u0 = TimeFunction(name='u', grid=model.grid, time_order=2, space_order=solver.space_order,
                       save=geometry.nt)
- 
 
     error("Forward prop")
     smooth_d, _, _ = solver.forward(save=True, u=u0)
@@ -174,9 +170,8 @@ def fwi_gradient_shot(vp_in, i, solver_params, source_location):
     solver.gradient(rec=residual, u=u0, grad=grad)
 
     grad = clip_boundary_and_numpy(grad.data, model.nbl)
-    
-    return objective, -grad
 
+    return objective, -grad
 
 
 if __name__ == "__main__":

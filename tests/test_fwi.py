@@ -11,7 +11,7 @@ def fwi_gradient_local(vp_in, model, geometry, nshots, solver_params):
     objective = 0.
 
     grad = np.zeros(model.shape)
-    
+
     for i in range(nshots):
         o, g = fwi_gradient_shot(vp_in, i, solver_params)
         objective += o
@@ -25,7 +25,7 @@ def test_equivalence_local_remote_single_shot():
     model, geometry, bounds = initial_setup(filename=initial_model_filename, tn=tn, dtype=dtype, space_order=so, nbl=nbl)
 
     solver_params = {'filename': initial_model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                         'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing}
+                     'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing}
 
     clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl))
 

@@ -1,7 +1,7 @@
 import numpy as np
 from devito.tools import memoized_meth
 from examples.seismic import (Receiver, PointSource, Model)
-from devito import TimeFunction, Function, Eq, Operator
+from devito import TimeFunction, Eq, Operator
 
 
 class DensityWaveSolver(object):
@@ -39,7 +39,7 @@ class DensityWaveSolver(object):
     def op_fwd(self, save=None):
         """Cached operator for forward runs with buffered wavefield"""
         return ForwardOperator(self.model, save=save, geometry=self.geometry,
-                                space_order=self.space_order,
+                               space_order=self.space_order,
                                **self._kwargs)
 
     def forward(self, src=None, rec=None, u=None, vp=None, save=None, **kwargs):
@@ -85,10 +85,9 @@ class DensityWaveSolver(object):
         return rec, u, summary
 
 
-def ForwardOperator(model, geometry, space_order=4,
-                    save=False, kernel='OT2', **kwargs):
+def ForwardOperator(model, geometry, space_order=4, save=False, kernel='OT2', **kwargs):
     """
-    Construct a forward modelling operator in an acoustic medium with density. 
+    Construct a forward modelling operator in an acoustic medium with density.
 
     Parameters
     ----------
@@ -126,6 +125,7 @@ def ForwardOperator(model, geometry, space_order=4,
     # Substitute spacing terms to reduce flops
     return Operator(eqn + src_term + rec_term, subs=model.spacing_map,
                     name='Forward', **kwargs)
+
 
 def density_stencil(field, m, s, damp, irho, **kwargs):
     """
@@ -180,14 +180,15 @@ def laplacian(field, m, s, irho):
         The time dimension spacing.
     """
     so = irho.space_order // 2
-    Lap = sum([getattr(irho * getattr(field, 'd%s'%d.name)(x0=d + d.spacing/2, fd_order=so), 'd%s'% d.name)(x0=d - d.spacing/2, fd_order=so) for d in irho.dimensions])
-    
+    Lap = sum([getattr(irho * getattr(field, 'd%s'%d.name)(x0=d + d.spacing/2, fd_order=so), 'd%s'% d.name)(x0=d - d.spacing/2, fd_order=so) for d in irho.dimensions]) # noqa
+
     return Lap
+
 
 class DensityModel(Model):
     def __init__(self, origin, spacing, shape, space_order, vp, irho=None, nbl=20,
                  dtype=np.float32, subdomains=(), bcs="mask", grid=None, **kwargs):
         super(DensityModel, self).__init__(origin, spacing, shape, space_order, vp, nbl, dtype,
-                                    subdomains, bcs, grid, **kwargs)
+                                           subdomains, bcs, grid, **kwargs)
 
         self.irho = self._gen_phys_param(irho, 'irho', space_order)
