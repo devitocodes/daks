@@ -3,3 +3,7 @@ tqdm
 bokeh
 azure-storage-blob==2.1.0 
 devito
+dask==2.18.0
+distributed==2.18.0
+numpy==1.18.5
+
