@@ -1,7 +1,11 @@
-from scipy import interpolate
-from timeit import default_timer
 import h5py
 import numpy as np
+import socket
+import os
+import csv
+
+from scipy import interpolate
+from timeit import default_timer
 
 
 def write_results(data, results_file):
@@ -19,7 +23,7 @@ def write_results(data, results_file):
             writer.writeheader()
         writer.writerow(data)
 
-        
+
 def to_hdf5(data, filename, datakey='data', additional=None):
     with h5py.File(filename, 'w') as f:
         f.create_dataset(datakey, data=data, dtype=data.dtype)
@@ -87,15 +91,6 @@ class Profiler(object):
 
         return results
 
-def exception_handler(orig_func):
-  def wrapper(*args,**kwargs):
-    try:
-      return orig_func(*args,**kwargs)
-    except:
-      import sys
-      sys.exit(1)
-  return wrapper
-
 
 def mat2vec(mat):
     return np.ravel(mat)
@@ -116,7 +111,7 @@ def reinterpolate(shot, new_nt, old_dt, order=3):
 
     if old_nt == new_nt:
         return shot
-    
+
     old_tn = float(old_nt*old_dt)
 
     new_dt = old_tn/new_nt
@@ -131,4 +126,3 @@ def reinterpolate(shot, new_nt, old_dt, order=3):
         new_shot[:, i] = interpolate.splev(newt, tck)
 
     return new_shot
-

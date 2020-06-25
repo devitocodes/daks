@@ -21,8 +21,8 @@ def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
     return solver
 
 
-def overthrust_model_iso(h5_file, datakey, so, nbl, dtype):
-    model_params = from_hdf5(h5_file, datakey, space_order=so, nbl=nbl,
+def overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype):
+    model_params = from_hdf5(h5_file, datakey, space_order=space_order, nbl=nbl,
                              dtype=dtype, bcs="damp")
 
     return Model(**model_params)
@@ -75,7 +75,7 @@ def create_geometry(model, tn, src_coordinates=None):
 
 def from_hdf5(f, datakey, **kwargs):
     if type(f) is Blob:
-        f = load_blob_to_hdf5(f.container, f.filename)
+        f = load_blob_to_hdf5(f)
         close = True
     elif not type(f) is h5py.File:
         f = h5py.File(f, 'r')

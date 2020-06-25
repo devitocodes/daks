@@ -4,6 +4,7 @@ from distributed import Client
 
 files_to_upload = ['azureio.py', 'fwiio.py', 'solvers.py', 'overthrust.py', 'util.py', 'dask_setup.py', 'fwi.py']
 
+
 def setup_dask():
     if "DASK_SERVER_IP" not in os.environ:
         raise ValueError("DASK_SERVER_IP not set")
@@ -15,4 +16,3 @@ def setup_dask():
         client.upload_file(f)
 
     return client
-    
