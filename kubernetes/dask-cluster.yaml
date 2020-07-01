@@ -62,6 +62,8 @@ spec:
           value: /app
         - name: DEVITO_LANGUAGE
           value: "openmp"
+        - name: DEVITO_LOGGING
+          value: "DEBUG"
         - name: OMP_PROC_BIND
           value: "TRUE"
         - name: "OMP_PLACES"
@@ -70,6 +72,7 @@ spec:
           value: "2"
         image: devitoaks.azurecr.io/daks-base:v1
         command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '4G', '--resources', 'tasks=1', '--no-nanny', '--nprocs', '1', '--nthreads', '1']
+        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '4G', '--resources', "tasks=1", '--nprocs', '1', '--nthreads', '1']
         ports:
         - containerPort: 80
         resources:
