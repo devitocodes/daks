@@ -6,7 +6,7 @@ from devito import Function, info, error, TimeFunction
 from examples.seismic import Model, Receiver
 from examples.seismic.acoustic import AcousticWaveSolver
 from overthrust import overthrust_solver_iso, overthrust_model_iso, create_geometry
-from fwi import initial_setup
+from fwi import fwi_gradient_shot
 from fwiio import load_shot
 from util import mat2vec, clip_boundary_and_numpy, vec2mat
 from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as setup
@@ -49,39 +49,14 @@ class TestGradient(object):
                              'src_coordinates': source_location}
         solver = overthrust_solver_iso(**solver_params)
         solver_params['shots_container'] = shots_container
-        #####
-        #v = clip_boundary_and_numpy(solver_true.model.vp, solver_true.model.nbl)
-        #v0 = clip_boundary_and_numpy(model0.vp, solver.model.nbl)
+
         v = model_t.vp.data
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
     
-        F0, gradient = fwi_gradient_shot(v0, shot_id, solver_params)
+        F0, gradient = fwi_gradient_shot(v0.data, shot_id, solver_params)
     
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
-
-
-def fwi_gradient_shot(vp_in, i, solver_params):
- 
-    shots_container = solver_params.pop("shots_container")
-    
-    rec, source_location, old_dt = load_shot(i, container=shots_container)
-
-    solver = overthrust_solver_iso(**solver_params)
-
-    rec0, u0, _ = solver.forward(save=True)
-    
-    residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec.data,
-                        time_range=solver.geometry.time_axis,
-                        coordinates=solver.geometry.rec_positions)
-
-    objective = .5*np.linalg.norm(residual.data.ravel())**2
-    error("Gradient")
-    grad, _ = solver.gradient(residual, u0)
-
-    #grad = clip_boundary_and_numpy(grad.data, model.nbl)
-
-    return objective, grad.data
 
 
 def from_scratch_gradient_test(shape=(70, 70), kernel='OT2', space_order=6):
