@@ -2,6 +2,8 @@ import click
 from distributed import wait
 from util import write_results, to_hdf5
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 import time
 from devito import Function, TimeFunction
@@ -12,7 +14,7 @@ from examples.seismic.acoustic import AcousticWaveSolver
 from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
 from functools import partial
 from scipy.optimize import minimize, Bounds
-from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
+from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate, m_to_vp, vp_to_m
 from dask_setup import setup_dask
 from fwiio import load_shot, Blob
 
@@ -47,31 +49,25 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
 
     f_args = [model, geometry, nshots, client, solver_params]
 
-    # if checkpointing:
-    #    f_g = fwi_gradient_checkpointed
-    #    compression_params = {'scheme': compression, 'tolerance': 10**(-tolerance)}
-    #    f_args.append(n_checkpoints)
-    #    f_args.append(compression_params)
-    # else:
+    clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
 
-    f_g = fwi_gradient
-
-    clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl))
-
+    clipped_m = vp_to_m(clipped_vp)
+    
     def callback(final_solution_basename, vec):
         callback.call_count += 1
         fwi_iteration = callback.call_count
         filename = "%s_%d.h5" % (final_solution_basename, fwi_iteration)
         with profiler.get_timer('io', 'write_progress'):
             to_hdf5(vec2mat(vec, model.shape), filename)
-        print(profiler.summary())
 
     callback.call_count = 0
 
     partial_callback = partial(callback, final_solution_basename)
 
-    solution_object = minimize(f_g,
-                               clipped_vp,
+    fwi_gradient.call_count = 0
+
+    solution_object = minimize(fwi_gradient,
+                               clipped_m,
                                args=tuple(f_args),
                                jac=True, method='L-BFGS-B',
                                callback=partial_callback, bounds=bounds,
@@ -107,7 +103,11 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
     vmax[:, 0:20] = clipped_model[:, 0:20]
     vmin[:, 0:20] = clipped_model[:, 0:20]
-    b = Bounds(mat2vec(vmin), mat2vec(vmax))
+
+    mmin = mat2vec(vp_to_m(vmax))
+    mmax = mat2vec(vp_to_m(vmin))
+    
+    b = Bounds(mmin, mmax)
 
     return model, geometry, b
 
@@ -118,12 +118,16 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     error("Starting eval")
     shots_container = solver_params.pop("shots_container")
     error("Loading shot")
-    rec, source_location, old_dt = load_shot(i, container=shots_container)
+    rec_data, source_location, old_dt = load_shot(i, container=shots_container)
     error("Initialising solver")
+    error("outside vp norm: %f, min: %f, max: %f" % (np.linalg.norm(vp_in), np.min(vp_in), np.max(vp_in)))
+    solver_params['vp'] = vp_in
     solver = overthrust_solver_iso(**solver_params)
-    error("setting vp")
-    solver.model.update('vp', vp_in)
-    error("vp norm: %f, min: %f, max: %f" % (np.linalg.norm(solver.model.vp.data), np.min(solver.model.vp.data), np.max(solver.model.vp.data)))
+    error("inside vp norm: %f, min: %f, max: %f" % (np.linalg.norm(solver.model.vp.data), np.min(solver.model.vp.data), np.max(solver.model.vp.data)))
+
+    error("Resampling")
+    rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
+    
     error("Forward prop")
     rec0, u0, _ = solver.forward(save=True)
     error("vp norm: %f, rec0 norm: %f" % (np.linalg.norm(vp_in), np.linalg.norm(rec0.data)))
@@ -135,12 +139,17 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     error("Gradient")
     grad, _ = solver.gradient(residual, u0)
 
+    del vp_in
+    del solver
+
     return objective, np.array(grad.data, dtype=solver_params['dtype'])
 
 
-def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
-    print("vp", np.linalg.norm(vp_in), np.min(vp_in), np.max(vp_in))
+def fwi_gradient(m_in, model, geometry, nshots, client, solver_params):
+    fwi_gradient.call_count += 1
+
     start_time = time.time()
+    vp_in = m_to_vp(m_in)
     vp_in = np.array(vec2mat(vp_in, model.shape), dtype=solver_params['dtype'])
     f_vp_in = client.scatter(vp_in)  # Dask enforces this for large arrays
     assert(model.shape == vp_in.shape)
@@ -152,24 +161,22 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
                                      resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
 
     shape = model.vp.shape
-    wait(futures)
+    
     def reduction(*args):
         grad = np.zeros(shape)  # Closured from above
         objective = 0.
 
         for a in args:
             o, g = a
-            print(o, np.linalg.norm(g))
             objective += o
             grad += g
         return objective, grad
 
-    #reduce_future = client.submit(reduction, *futures)
-    #wait(reduce_future)
+    reduce_future = client.submit(reduction, *futures)
 
-    objective, grad = reduction(*[f.result() for f in futures])
+    wait(reduce_future)
 
-    #objective, grad = reduce_future.result()
+    objective, grad = reduce_future.result()
     elapsed_time = time.time() - start_time
     print("Objective function evaluation completed in %f seconds. F0=%f" % (elapsed_time, objective))
 
@@ -177,8 +184,15 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
 
     # Scipy LBFGS misbehaves if type is not float64
     grad = mat2vec(np.array(grad)).astype(np.float64)
-
-    return objective, -grad
+    grad /= np.max(np.abs(grad)) # Scale the gradient
+    
+    from examples.seismic import plot_velocity
+    model.update('vp', vp_in)
+    
+    plt.clf()
+    plot_velocity(model)
+    plt.savefig("progress/fwi-iter%d.pdf"%(fwi_gradient.call_count))
+    return objective, grad
 
 
 if __name__ == "__main__":
