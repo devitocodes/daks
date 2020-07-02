@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 import time
-from devito import Function, TimeFunction
+from devito import Function, TimeFunction, clear_cache
 from devito.logger import error
 from examples.seismic import Receiver, Model
 from examples.seismic.acoustic import AcousticWaveSolver
@@ -50,8 +50,6 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     f_args = [model, geometry, nshots, client, solver_params]
 
     clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
-
-    clipped_m = vp_to_m(clipped_vp)
     
     def callback(final_solution_basename, vec):
         callback.call_count += 1
@@ -67,7 +65,7 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     fwi_gradient.call_count = 0
 
     solution_object = minimize(fwi_gradient,
-                               clipped_m,
+                               clipped_vp,
                                args=tuple(f_args),
                                jac=True, method='L-BFGS-B',
                                callback=partial_callback, bounds=bounds,
@@ -103,11 +101,8 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
     vmax[:, 0:20] = clipped_model[:, 0:20]
     vmin[:, 0:20] = clipped_model[:, 0:20]
-
-    mmin = mat2vec(vp_to_m(vmax))
-    mmax = mat2vec(vp_to_m(vmin))
     
-    b = Bounds(mmin, mmax)
+    b = Bounds(mat2vec(vmin), mat2vec(vmax))
 
     return model, geometry, b
 
@@ -145,11 +140,10 @@ def fwi_gradient_shot(vp_in, i, solver_params):
     return objective, np.array(grad.data, dtype=solver_params['dtype'])
 
 
-def fwi_gradient(m_in, model, geometry, nshots, client, solver_params):
+def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
     fwi_gradient.call_count += 1
 
     start_time = time.time()
-    vp_in = m_to_vp(m_in)
     vp_in = np.array(vec2mat(vp_in, model.shape), dtype=solver_params['dtype'])
     f_vp_in = client.scatter(vp_in)  # Dask enforces this for large arrays
     assert(model.shape == vp_in.shape)
@@ -178,7 +172,7 @@ def fwi_gradient(m_in, model, geometry, nshots, client, solver_params):
 
     objective, grad = reduce_future.result()
     elapsed_time = time.time() - start_time
-    print("Objective function evaluation completed in %f seconds. F0=%f" % (elapsed_time, objective))
+    print("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
 
     grad = clip_boundary_and_numpy(grad, model.nbl)
 
@@ -192,7 +186,7 @@ def fwi_gradient(m_in, model, geometry, nshots, client, solver_params):
     plt.clf()
     plot_velocity(model)
     plt.savefig("progress/fwi-iter%d.pdf"%(fwi_gradient.call_count))
-    return objective, grad
+    return objective, -grad
 
 
 if __name__ == "__main__":
