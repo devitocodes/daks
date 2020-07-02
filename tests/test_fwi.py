@@ -46,6 +46,10 @@ def test_vec2mat():
 
     assert(np.array_equal(mat, vec2mat(vec, shape)))
 
+    back = mat2vec(mat)
+
+    assert(np.array_equal(back, vec))
+
 # ToTest: initial_setup, mat2vec, fwi_gradient_shot, clip_boundary_and_numpy
 
 
