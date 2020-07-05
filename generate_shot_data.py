@@ -1,6 +1,6 @@
 import numpy as np
 import click
-from overthrust import overthrust_model_density, overthrust_solver_density
+from overthrust import overthrust_model_density, overthrust_solver_density, overthrust_model_iso, overthrust_solver_iso
 from azureio import create_container
 from fwiio import save_shot, Blob
 from distributed import wait
@@ -12,13 +12,13 @@ from dask_setup import setup_dask
 @click.option("--tn", default=4000, type=int, help="Number of timesteps to run")
 @click.option("--nshots", default=20, type=int, help="Number of shots (already decided when generating shots)")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
-@click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
+@click.option("--nbl", default=20, type=int, help="Number of absorbing boundary layers to add to the model")
 @click.option("--container", default="shots", type=str, help="Name of container to store generated shots")
 def run(model_filename, tn, nshots, so, nbl, container):
 
     dtype = np.float32
 
-    model = overthrust_model_density(Blob("models", model_filename), datakey="m", dtype=dtype, space_order=so, nbl=nbl)
+    model = overthrust_model_iso(Blob("models", model_filename), datakey="m", dtype=dtype, space_order=so, nbl=nbl)
 
     create_container(container)
 
@@ -32,8 +32,8 @@ def run(model_filename, tn, nshots, so, nbl, container):
 
     futures = []
     for i in range(nshots):
-        futures.append(client.submit(generate_shot, (i, src_coords[i]), solver_params=solver_params, container=container, filename=model_filename, resources={'tasks': 1}))
-
+        #futures.append(client.submit(generate_shot, (i, src_coords[i]), solver_params=solver_params, container=container, filename=model_filename, resources={'tasks': 1}))
+        generate_shot((i, src_coords[i]), solver_params=solver_params, container=container, filename=model_filename)
     wait(futures)
 
     results = [f.result() for f in futures]
@@ -58,9 +58,9 @@ def generate_shot(shot_info, solver_params, filename, container):
     shot_id, src_coords = shot_info
     solver_params['src_coordinates'] = src_coords
 
-    solver = overthrust_solver_density(Blob("models", filename), **solver_params)
-
-    rec, u, _ = solver.forward()
+    solver = overthrust_solver_iso(Blob("models", filename), **solver_params)
+    
+    rec, u, _ = solver.forward(dt=1.75)
 
     save_shot(shot_id, rec.data, src_coords, solver.geometry.dt, container=container)
     return True
