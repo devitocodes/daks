@@ -13,7 +13,7 @@ spec:
         "beta.kubernetes.io/os": linux
       containers:
       - name: devito-server
-        image: devitoaks.azurecr.io/daks-base:v1
+        image: devitoaks.azurecr.io/daks-base:v2
         command: ['/venv/bin/dask-scheduler']
         ports:
         - containerPort: 8786
@@ -63,22 +63,21 @@ spec:
         - name: DEVITO_LANGUAGE
           value: "openmp"
         - name: DEVITO_LOGGING
-          value: "DEBUG"
+          value: "INFO"
         - name: OMP_PROC_BIND
           value: "TRUE"
         - name: "OMP_PLACES"
           value: "cores"
         - name: "OMP_NUM_THREADS"
-          value: "2"
-        image: devitoaks.azurecr.io/daks-base:v1
-        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '4G', '--resources', 'tasks=1', '--no-nanny', '--nprocs', '1', '--nthreads', '1']
-        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '4G', '--resources', "tasks=1", '--nprocs', '1', '--nthreads', '1']
+          value: "3"
+        image: devitoaks.azurecr.io/daks-base:v2
+        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '5G', '--resources', 'tasks=1', '--nprocs', '1', '--nthreads', '1']
         ports:
         - containerPort: 80
         resources:
           requests:
             memory: 5G
-            cpu: 2
+            cpu: 3
           limits:
             memory: 5G
-            cpu: 2
+            cpu: 3
