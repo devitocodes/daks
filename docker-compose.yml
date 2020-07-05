@@ -6,7 +6,7 @@ services:
 
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./kubernetes/Dockerfile
     image: daks-base
 
     environment:
