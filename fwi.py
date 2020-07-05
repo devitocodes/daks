@@ -31,6 +31,7 @@ profiler = Profiler()
 @click.option("--shots-container", default="shots-iso", type=str, help="Name of container to read shots from")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
+@click.option("--nbl", default=20, type=int, help="Number of absorbing boundary layers to add to the model")
 @click.option("--kernel", default="OT2", help="Computation kernel to use (options: OT2, OT4)")
 @click.option("--checkpointing/--no-checkpointing", default=False, help="Enable/disable checkpointing")
 @click.option("--n-checkpoints", default=1000, type=int, help="Number of checkpoints to use")
@@ -49,14 +50,13 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
 
     f_args = [model, geometry, nshots, client, solver_params]
 
-    clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
-    
+    v0 = mat2vec(model.vp.data).astype(np.float64)
     def callback(final_solution_basename, vec):
         callback.call_count += 1
         fwi_iteration = callback.call_count
         filename = "%s_%d.h5" % (final_solution_basename, fwi_iteration)
         with profiler.get_timer('io', 'write_progress'):
-            to_hdf5(vec2mat(vec, model.shape), filename)
+            to_hdf5(vec2mat(vec, model.vp.shape), filename)
 
     callback.call_count = 0
 
@@ -65,13 +65,13 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     fwi_gradient.call_count = 0
 
     solution_object = minimize(fwi_gradient,
-                               clipped_vp,
+                               v0,
                                args=tuple(f_args),
                                jac=True, method='L-BFGS-B',
                                callback=partial_callback, bounds=bounds,
                                options={'disp': True, 'maxiter': 60})
 
-    final_model = vec2mat(solution_object.x, model.shape)
+    final_model = vec2mat(solution_object.x, model.vp.shape)
 
     true_model = overthrust_model_iso("overthrust_3D_true_model_2D.h5", datakey="m", dtype=dtype, space_order=so, nbl=nbl)
     true_model_vp = clip_boundary_and_numpy(true_model.vp.data, true_model.nbl)
@@ -95,12 +95,11 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
     geometry = create_geometry(model, tn)
 
-    clipped_model = clip_boundary_and_numpy(model.vp, model.nbl)
-    vmax = np.ones(clipped_model.shape) * 6.5
-    vmin = np.ones(clipped_model.shape) * 1.3
+    vmax = np.ones(model.vp.shape) * 6.5
+    vmin = np.ones(model.vp.shape) * 1.3
 
-    vmax[:, 0:20] = clipped_model[:, 0:20]
-    vmin[:, 0:20] = clipped_model[:, 0:20]
+    vmax[:, 0:20+model.nbl] = model.vp.data[:, 0:20+model.nbl]
+    vmin[:, 0:20+model.nbl] = model.vp.data[:, 0:20+model.nbl]
     
     b = Bounds(mat2vec(vmin), mat2vec(vmax))
 
@@ -109,50 +108,49 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
 # This runs on the dask worker in the cloud.
 # Anything passed into or returned from this function will be serialised and sent over the network.
-def fwi_gradient_shot(vp_in, i, solver_params):
-    error("Starting eval")
-    shots_container = solver_params.pop("shots_container")
-    error("Loading shot")
+def fwi_gradient_shot(vp_in, i, solver, shots_container):    
     rec_data, source_location, old_dt = load_shot(i, container=shots_container)
-    error("Initialising solver")
-    error("outside vp norm: %f, min: %f, max: %f" % (np.linalg.norm(vp_in), np.min(vp_in), np.max(vp_in)))
-    solver_params['vp'] = vp_in
-    solver = overthrust_solver_iso(**solver_params)
-    error("inside vp norm: %f, min: %f, max: %f" % (np.linalg.norm(solver.model.vp.data), np.min(solver.model.vp.data), np.max(solver.model.vp.data)))
 
-    error("Resampling")
+    solver.geometry.src_positions[0, :] = source_location[:]
+ 
+    #TODO: Change to built-in
     rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
     
-    error("Forward prop")
-    rec0, u0, _ = solver.forward(save=True)
-    error("vp norm: %f, rec0 norm: %f" % (np.linalg.norm(vp_in), np.linalg.norm(rec0.data)))
+    rec0, u0, _ = solver.forward(save=True, dt=1.75)
+    
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
                         time_range=solver.geometry.time_axis,
                         coordinates=solver.geometry.rec_positions)
 
     objective = .5*np.linalg.norm(residual.data.ravel())**2
-    error("Gradient")
-    grad, _ = solver.gradient(residual, u0)
 
+    grad, _ = solver.gradient(residual, u=u0)
+
+    dtype = solver.model.dtype
+    
     del vp_in
     del solver
 
-    return objective, np.array(grad.data, dtype=solver_params['dtype'])
+    return objective, np.array(grad.data, dtype=dtype)
 
 
 def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
     fwi_gradient.call_count += 1
 
     start_time = time.time()
-    vp_in = np.array(vec2mat(vp_in, model.shape), dtype=solver_params['dtype'])
+    vp_in = np.array(vec2mat(vp_in, model.vp.shape), dtype=solver_params['dtype'])
     f_vp_in = client.scatter(vp_in)  # Dask enforces this for large arrays
-    assert(model.shape == vp_in.shape)
-
+    params = solver_params.copy()
+    shots_container = params.pop('shots_container')
+    solver = overthrust_solver_iso(**params)
+    solver.model.vp.data[:] = vp_in[:]
+    f_solver = client.scatter(solver)
     futures = []
 
     for i in range(nshots):
-        futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, solver_params,
+        futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, f_solver, shots_container,
                                      resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
+        #futures.append(fwi_gradient_shot(vp_in, i, solver_params))
 
     shape = model.vp.shape
     
@@ -171,10 +169,9 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
     wait(reduce_future)
 
     objective, grad = reduce_future.result()
+    #objective, grad = reduction(*futures)
     elapsed_time = time.time() - start_time
     print("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
-
-    grad = clip_boundary_and_numpy(grad, model.nbl)
 
     # Scipy LBFGS misbehaves if type is not float64
     grad = mat2vec(np.array(grad)).astype(np.float64)
