@@ -14,12 +14,11 @@ def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
                           **kwargs):
     model = overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype)
     if vp is not None:
-        print("setting vp")
         model.update('vp', vp)
     geometry = create_geometry(model, tn, src_coordinates)
 
     solver = AcousticWaveSolver(model, geometry, kernel=kernel,
-                                space_order=space_order, **kwargs)
+                                space_order=space_order, dtype=dtype, **kwargs)
     return solver
 
 
@@ -54,32 +53,35 @@ def overthrust_solver_density(h5_file, tn=4000, src_coordinates=None,
 
 
 def create_geometry(model, tn, src_coordinates=None):
-    shape = model.vp.shape
+    shape = model.shape
     spacing = model.spacing
     nrec = shape[0]
 
     if src_coordinates is None:
         src_coordinates = np.empty((1, len(spacing)))
+
         src_coordinates[0, :] = np.array(model.domain_size) * .5
         if len(shape) > 1:
             src_coordinates[0, -1] = model.origin[-1] + 2 * spacing[-1]
+    elif len(src_coordinates.shape) == 1:
+        src_coordinates = np.expand_dims(src_coordinates, axis=0)
 
     rec_coordinates = np.empty((nrec, len(spacing)))
     rec_coordinates[:, 0] = np.linspace(0., model.domain_size[0], num=nrec)
     if len(shape) > 1:
         rec_coordinates[:, 1] = np.array(model.domain_size)[1] * .5
         rec_coordinates[:, -1] = model.origin[-1] + 2 * spacing[-1]
-
     geometry = AcquisitionGeometry(model, rec_coordinates, src_coordinates,
-                                   t0=0.0, tn=tn, src_type='Ricker', f0=0.008)
+                                   t0=0.0, tn=tn, src_type='Ricker', f0=0.008).resample(1.75)
+
     return geometry
 
 
 def from_hdf5(f, datakey, **kwargs):
-    if type(f) is Blob:
+    if isinstance(f, Blob):
         f = load_blob_to_hdf5(f)
         close = True
-    elif not type(f) is h5py.File:
+    elif not isinstance(f, h5py.File):
         f = h5py.File(f, 'r')
         close = True
     else:
