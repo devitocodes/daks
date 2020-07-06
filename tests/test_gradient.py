@@ -44,17 +44,15 @@ class TestGradient(object):
         rec, source_location, _ = load_shot(shot_id, container=shots_container)
         solver_params = {'h5_file': initial_model_filename, 'tn': tn,
                              'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                             'nbl': nbl, 'origin': model0.origin,
-                             'spacing': model0.spacing,
+                             'nbl': nbl,
                              'src_coordinates': source_location}
         solver = overthrust_solver_iso(**solver_params)
-        solver_params['shots_container'] = shots_container
 
         v = model_t.vp.data
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
     
-        F0, gradient = fwi_gradient_shot(v0.data, shot_id, solver_params)
+        F0, gradient = fwi_gradient_shot(v0.data, shot_id, solver, shots_container)
     
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 
@@ -104,7 +102,7 @@ def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm):
         vloc = Function(name='vloc', grid=wave.model.grid, space_order=space_order,
                         initializer=initializer)
         # Data for the new model
-        d = wave.forward(vp=vloc)[0]
+        d = wave.forward(vp=vloc, dt=wave.model.critical_dt)[0]
         # First order error Phi(m0+dm) - Phi(m0)
         F_i = .5*linalg.norm((d.data - rec.data).reshape(-1))**2
         error1[i] = np.absolute(F_i - F0)
