@@ -10,15 +10,13 @@ from solvers import DensityWaveSolver, DensityModel
 
 
 def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
-                          space_order=2, datakey='m0', nbl=40, dtype=np.float32, vp=None,
-                          **kwargs):
+                          space_order=2, datakey='m0', nbl=40, dtype=np.float32):
     model = overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype)
-    if vp is not None:
-        model.update('vp', vp)
+
     geometry = create_geometry(model, tn, src_coordinates)
 
     solver = AcousticWaveSolver(model, geometry, kernel=kernel,
-                                space_order=space_order, dtype=dtype, **kwargs)
+                                space_order=space_order, dtype=dtype)
     return solver
 
 
@@ -41,14 +39,12 @@ def overthrust_model_density(h5_file, datakey, space_order, nbl, dtype):
 
 
 def overthrust_solver_density(h5_file, tn=4000, src_coordinates=None,
-                              space_order=2, datakey='m0', nbl=40, dtype=np.float32,
-                              **kwargs):
+                              space_order=2, datakey='m0', nbl=40, dtype=np.float32):
     model = overthrust_model_density(h5_file, datakey, space_order, nbl, dtype)
 
     geometry = create_geometry(model, tn, src_coordinates)
 
-    solver = DensityWaveSolver(model, geometry, space_order=space_order,
-                               **kwargs)
+    solver = DensityWaveSolver(model, geometry, space_order=space_order)
     return solver
 
 
