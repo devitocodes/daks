@@ -31,10 +31,10 @@ class TestGradient(object):
         initial_model_filename = "overthrust_3D_initial_model_2D.h5"
         tn = 4000
         dtype = np.float32
-        so = 6
+        so = 8
         nbl = 40
-        shot_id = 10
-        shots_container = "shots-iso"
+        shot_id = 20
+        shots_container = "shots-iso-40-nbl-40-so-8"
         model0 = overthrust_model_iso(initial_model_filename, datakey="m0",
                                           dtype=dtype, space_order=so, nbl=nbl)
 
