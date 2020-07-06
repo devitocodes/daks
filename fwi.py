@@ -48,14 +48,14 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
 
     f_args = [model, geometry, nshots, client, solver, shots_container]
 
-    v0 = mat2vec(model.vp.data).astype(np.float64)
+    v0 = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
 
     def callback(final_solution_basename, vec):
         callback.call_count += 1
         fwi_iteration = callback.call_count
         filename = "%s_%d.h5" % (final_solution_basename, fwi_iteration)
         with profiler.get_timer('io', 'write_progress'):
-            to_hdf5(vec2mat(vec, model.vp.shape), filename)
+            to_hdf5(vec2mat(vec, model.shape), filename)
 
     callback.call_count = 0
 
@@ -94,12 +94,12 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
     geometry = create_geometry(model, tn)
 
-    vmax = np.ones(model.vp.shape) * 6.5
-    vmin = np.ones(model.vp.shape) * 1.3
+    clipped_model = clip_boundary_and_numpy(model.vp, model.nbl)
+    vmax = np.ones(clipped_model.shape) * 6.5
+    vmin = np.ones(clipped_model.shape) * 1.3
 
-    vmax[:, 0:20+model.nbl] = model.vp.data[:, 0:20+model.nbl]
-    vmin[:, 0:20+model.nbl] = model.vp.data[:, 0:20+model.nbl]
-
+    vmax[:, 0:20] = clipped_model[:, 0:20]
+    vmin[:, 0:20] = clipped_model[:, 0:20]
     b = Bounds(mat2vec(vmin), mat2vec(vmax))
 
     return model, geometry, b
@@ -125,7 +125,7 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
     objective = .5*np.linalg.norm(residual.data.ravel())**2
 
     grad, _ = solver.gradient(residual, u=u0)
-
+    
     dtype = solver.model.dtype
 
     del vp_in
@@ -138,7 +138,7 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver, shots_container
     fwi_gradient.call_count += 1
 
     start_time = time.time()
-    vp_in = np.array(vec2mat(vp_in, model.vp.shape), dtype=solver.model.dtype)
+    vp_in = np.array(vec2mat(vp_in, model.shape), dtype=solver.model.dtype)
 
     f_vp_in = client.scatter(vp_in)  # Dask enforces this for large arrays
 
@@ -174,7 +174,7 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver, shots_container
     print("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
 
     # Scipy LBFGS misbehaves if type is not float64
-    grad = mat2vec(np.array(grad)).astype(np.float64)
+    grad = mat2vec(clip_boundary_and_numpy(grad, solver.model.nbl)).astype(np.float64)
     # grad /= np.max(np.abs(grad)) # Scale the gradient
 
     from examples.seismic import plot_velocity
