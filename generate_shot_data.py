@@ -30,8 +30,9 @@ def run(model_filename, tn, nshots, so, nbl, container):
 
     print("Generating shots")
 
-    futures = client.map(generate_shot, list(enumerate(src_coords)), solver_params=solver_params, container=container,
-                         filename=model_filename)
+    futures = []
+    for i in range(nshots):
+        futures.append(client.submit(generate_shot, (i, src_coords[i]), solver_params=solver_params, container=container, filename=model_filename, resources={'tasks': 1}))
 
     wait(futures)
 

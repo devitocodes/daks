@@ -66,6 +66,8 @@ spec:
           value: "TRUE"
         - name: "OMP_PLACES"
           value: "cores"
+        - name: "OMP_NUM_THREADS"
+          value: "2"
         image: devitoaks.azurecr.io/daks-base:v1
         command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '4G', '--resources', 'tasks=1', '--no-nanny', '--nprocs', '1', '--nthreads', '1']
         ports:
