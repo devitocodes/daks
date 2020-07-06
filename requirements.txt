@@ -1,6 +1,6 @@
 h5py
 tqdm
-bokeh
+bokeh==2.0 # Freeze to v2.0 until dask issue is fixed
 azure-storage-blob==2.1.0 
 devito
 dask==2.18.0
