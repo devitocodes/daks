@@ -1,22 +1,19 @@
 import click
-from distributed import wait
-from util import write_results, to_hdf5
-import numpy as np
 import matplotlib.pyplot as plt
-
-
+import numpy as np
 import time
-from devito import Function, TimeFunction, clear_cache
-from devito.logger import error
-from examples.seismic import Receiver, Model
-from examples.seismic.acoustic import AcousticWaveSolver
 
-from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
+from distributed import wait
 from functools import partial
 from scipy.optimize import minimize, Bounds
-from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate, m_to_vp, vp_to_m
+from util import write_results, to_hdf5
+
+from examples.seismic import Receiver
+
 from dask_setup import setup_dask
 from fwiio import load_shot, Blob
+from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
+from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
 
 
 profiler = Profiler()
@@ -42,8 +39,8 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     dtype = np.float32
     model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl)
 
-    solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                     'nbl': nbl}
+    solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
+                     'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl}
 
     client = setup_dask()
 
@@ -52,6 +49,7 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     f_args = [model, geometry, nshots, client, solver, shots_container]
 
     v0 = mat2vec(model.vp.data).astype(np.float64)
+
     def callback(final_solution_basename, vec):
         callback.call_count += 1
         fwi_iteration = callback.call_count
@@ -101,7 +99,7 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
     vmax[:, 0:20+model.nbl] = model.vp.data[:, 0:20+model.nbl]
     vmin[:, 0:20+model.nbl] = model.vp.data[:, 0:20+model.nbl]
-    
+
     b = Bounds(mat2vec(vmin), mat2vec(vmax))
 
     return model, geometry, b
@@ -109,18 +107,17 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
 # This runs on the dask worker in the cloud.
 # Anything passed into or returned from this function will be serialised and sent over the network.
-def fwi_gradient_shot(vp_in, i, solver, shots_container):    
+def fwi_gradient_shot(vp_in, i, solver, shots_container):
     rec_data, source_location, old_dt = load_shot(i, container=shots_container)
 
     solver.geometry.src_positions[0, :] = source_location[:]
-    #solver.model.update("vp", vp_in)
-    solver.model.vp.data[:] = vp_in.data[:]
-    
-    #TODO: Change to built-in
+    solver.model.update("vp", vp_in)
+
+    # TODO: Change to built-in
     rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
-    
+
     rec0, u0, _ = solver.forward(save=True, dt=solver.model.critical_dt)
-    
+
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
                         time_range=solver.geometry.time_axis,
                         coordinates=solver.geometry.rec_positions)
@@ -130,7 +127,7 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
     grad, _ = solver.gradient(residual, u=u0)
 
     dtype = solver.model.dtype
-    
+
     del vp_in
     del solver
 
@@ -144,19 +141,19 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver, shots_container
     vp_in = np.array(vec2mat(vp_in, model.vp.shape), dtype=solver.model.dtype)
 
     f_vp_in = client.scatter(vp_in)  # Dask enforces this for large arrays
-    
+
     solver.model.update("vp", vp_in)
-    
+
     f_solver = client.scatter(solver)
     futures = []
 
     for i in range(nshots):
         futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, f_solver, shots_container,
                                      resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
-        #futures.append(fwi_gradient_shot(vp_in, i, solver_params))
+        # futures.append(fwi_gradient_shot(vp_in, i, solver_params))
 
     shape = model.vp.shape
-    
+
     def reduction(*args):
         grad = np.zeros(shape)  # Closured from above
         objective = 0.
@@ -172,20 +169,20 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver, shots_container
     wait(reduce_future)
 
     objective, grad = reduce_future.result()
-    #objective, grad = reduction(*futures)
+    # objective, grad = reduction(*futures)
     elapsed_time = time.time() - start_time
     print("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
 
     # Scipy LBFGS misbehaves if type is not float64
     grad = mat2vec(np.array(grad)).astype(np.float64)
-    #grad /= np.max(np.abs(grad)) # Scale the gradient
-    
+    # grad /= np.max(np.abs(grad)) # Scale the gradient
+
     from examples.seismic import plot_velocity
     model.update('vp', vp_in)
-    
+
     plt.clf()
     plot_velocity(model)
-    plt.savefig("progress/fwi-iter%d.pdf"%(fwi_gradient.call_count))
+    plt.savefig("progress/fwi-iter%d.pdf" % (fwi_gradient.call_count))
     return objective, -grad
 
 

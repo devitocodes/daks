@@ -1,15 +1,15 @@
 import numpy as np
 from numpy import linalg
 
-from devito import Function, info, error, TimeFunction
+from devito import Function, info
 
-from examples.seismic import Model, Receiver
-from examples.seismic.acoustic import AcousticWaveSolver
-from overthrust import overthrust_solver_iso, overthrust_model_iso, create_geometry
+from examples.seismic import Receiver
+from overthrust import overthrust_solver_iso, overthrust_model_iso
 from fwi import fwi_gradient_shot
 from fwiio import load_shot
-from util import mat2vec, clip_boundary_and_numpy, vec2mat
+from util import mat2vec
 from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as setup
+
 
 class TestGradient(object):
 
@@ -36,36 +36,36 @@ class TestGradient(object):
         shot_id = 20
         shots_container = "shots-iso-40-nbl-40-so-8"
         model0 = overthrust_model_iso(initial_model_filename, datakey="m0",
-                                          dtype=dtype, space_order=so, nbl=nbl)
+                                      dtype=dtype, space_order=so, nbl=nbl)
 
         model_t = overthrust_model_iso(true_model_filename, datakey="m",
-                                           dtype=dtype, space_order=so, nbl=nbl)
+                                       dtype=dtype, space_order=so, nbl=nbl)
 
         rec, source_location, _ = load_shot(shot_id, container=shots_container)
         solver_params = {'h5_file': initial_model_filename, 'tn': tn,
-                             'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                             'nbl': nbl,
-                             'src_coordinates': source_location}
+                         'space_order': so, 'dtype': dtype, 'datakey': 'm0',
+                         'nbl': nbl,
+                         'src_coordinates': source_location}
         solver = overthrust_solver_iso(**solver_params)
 
         v = model_t.vp.data
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
-    
+
         F0, gradient = fwi_gradient_shot(v0.data, shot_id, solver, shots_container)
-    
+
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 
 
 def from_scratch_gradient_test(shape=(70, 70), kernel='OT2', space_order=6):
     spacing = tuple(10. for _ in shape)
     wave = setup(shape=shape, spacing=spacing, dtype=np.float64,
-                     kernel=kernel, space_order=space_order,
-                     nbl=40)
+                 kernel=kernel, space_order=space_order,
+                 nbl=40)
     v0 = Function(name='v0', grid=wave.model.grid, space_order=space_order)
     smooth(v0, wave.model.vp)
     v = wave.model.vp.data
-    
+
     dm = np.float64(v**(-2) - v0.data**(-2))
 
     # Compute receiver data for the true velocity
@@ -85,6 +85,7 @@ def from_scratch_gradient_test(shape=(70, 70), kernel='OT2', space_order=6):
     gradient, _ = wave.jacobian_adjoint(residual, u0, vp=v0)
     v0 = v0.data
     basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm)
+
 
 def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm):
 
@@ -117,6 +118,7 @@ def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm):
     assert np.isclose(p1[0], 1.0, rtol=0.1)
     assert np.isclose(p2[0], 2.0, rtol=0.1)
 
+
 def plot_errors(error1, error2, H):
     import matplotlib.pyplot as plt
     plt.plot(H, error1, label="error1")
@@ -131,6 +133,4 @@ def plot_errors(error1, error2, H):
 
 
 if __name__ == "__main__":
-    #from_scratch_gradient_test()
-    #overthrust_from_scratch()
     TestGradient().test_gradientFWI()

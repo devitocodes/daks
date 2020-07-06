@@ -127,8 +127,10 @@ def reinterpolate(shot, new_nt, old_dt, order=3):
 
     return new_shot
 
+
 def m_to_vp(m):
     return np.sqrt(1./m)
+
 
 def vp_to_m(vp):
     return 1./vp**2
