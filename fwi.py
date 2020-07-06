@@ -31,7 +31,6 @@ profiler = Profiler()
 @click.option("--shots-container", default="shots-iso", type=str, help="Name of container to read shots from")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
-@click.option("--nbl", default=20, type=int, help="Number of absorbing boundary layers to add to the model")
 @click.option("--kernel", default="OT2", help="Computation kernel to use (options: OT2, OT4)")
 @click.option("--checkpointing/--no-checkpointing", default=False, help="Enable/disable checkpointing")
 @click.option("--n-checkpoints", default=1000, type=int, help="Number of checkpoints to use")
@@ -44,11 +43,13 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl)
 
     solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                     'nbl': nbl, 'origin': np.array(model.origin), 'spacing': np.array(model.spacing), 'shots_container': shots_container}
+                     'nbl': nbl}
 
     client = setup_dask()
 
-    f_args = [model, geometry, nshots, client, solver_params]
+    solver = overthrust_solver_iso(**solver_params)
+
+    f_args = [model, geometry, nshots, client, solver, shots_container]
 
     v0 = mat2vec(model.vp.data).astype(np.float64)
     def callback(final_solution_basename, vec):
@@ -112,11 +113,13 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
     rec_data, source_location, old_dt = load_shot(i, container=shots_container)
 
     solver.geometry.src_positions[0, :] = source_location[:]
- 
+    #solver.model.update("vp", vp_in)
+    solver.model.vp.data[:] = vp_in.data[:]
+    
     #TODO: Change to built-in
     rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
     
-    rec0, u0, _ = solver.forward(save=True, dt=1.75)
+    rec0, u0, _ = solver.forward(save=True, dt=solver.model.critical_dt)
     
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
                         time_range=solver.geometry.time_axis,
@@ -134,16 +137,16 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
     return objective, np.array(grad.data, dtype=dtype)
 
 
-def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
+def fwi_gradient(vp_in, model, geometry, nshots, client, solver, shots_container):
     fwi_gradient.call_count += 1
 
     start_time = time.time()
-    vp_in = np.array(vec2mat(vp_in, model.vp.shape), dtype=solver_params['dtype'])
+    vp_in = np.array(vec2mat(vp_in, model.vp.shape), dtype=solver.model.dtype)
+
     f_vp_in = client.scatter(vp_in)  # Dask enforces this for large arrays
-    params = solver_params.copy()
-    shots_container = params.pop('shots_container')
-    solver = overthrust_solver_iso(**params)
-    solver.model.vp.data[:] = vp_in[:]
+    
+    solver.model.update("vp", vp_in)
+    
     f_solver = client.scatter(solver)
     futures = []
 
@@ -175,7 +178,7 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver_params):
 
     # Scipy LBFGS misbehaves if type is not float64
     grad = mat2vec(np.array(grad)).astype(np.float64)
-    grad /= np.max(np.abs(grad)) # Scale the gradient
+    #grad /= np.max(np.abs(grad)) # Scale the gradient
     
     from examples.seismic import plot_velocity
     model.update('vp', vp_in)
