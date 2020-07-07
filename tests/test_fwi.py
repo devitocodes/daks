@@ -1,6 +1,7 @@
 import numpy as np
 from fwi import fwi_gradient, initial_setup, mat2vec, clip_boundary_and_numpy, vec2mat, fwi_gradient_shot
 from dask_setup import setup_dask
+from fwiio import Blob
 
 
 def fwi_gradient_local(vp_in, model, geometry, nshots, solver_params):
@@ -22,7 +23,8 @@ def fwi_gradient_local(vp_in, model, geometry, nshots, solver_params):
 
 def test_equivalence_local_remote_single_shot():
     initial_model_filename, tn, dtype, so, nbl = "overthrust_3D_initial_model_2D.h5", 4000, np.float32, 6, 40
-    model, geometry, bounds = initial_setup(filename=initial_model_filename, tn=tn, dtype=dtype, space_order=so, nbl=nbl)
+    model, geometry, bounds = initial_setup(filename=Blob("models", initial_model_filename), tn=tn, dtype=dtype,
+                                            space_order=so, nbl=nbl)
 
     solver_params = {'filename': initial_model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
                      'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing}
