@@ -28,7 +28,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        PYTHONPATH=$PYTHONPATH:$PWD py.test -svx tests/*
+        DASK_SERVER_IP=52.150.44.6 PYTHONPATH=$PYTHONPATH:$PWD py.test -svx tests/*
     
     - name: Run scripts
       run: |
