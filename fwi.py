@@ -125,7 +125,7 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
     objective = .5*np.linalg.norm(residual.data.ravel())**2
 
     grad, _ = solver.gradient(residual, u=u0)
-    
+
     dtype = solver.model.dtype
 
     del vp_in
