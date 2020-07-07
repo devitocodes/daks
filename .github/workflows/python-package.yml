@@ -28,7 +28,7 @@ jobs:
 
     - name: Test with pytest
       run: |
-        py.test -svx tests/*
+        PYTHONPATH=$PYTHONPATH:$PWD py.test -svx tests/*
     
     - name: Run scripts
       run: |
