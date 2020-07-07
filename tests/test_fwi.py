@@ -27,8 +27,8 @@ def test_equivalence_local_remote_single_shot():
     model, geometry, bounds = initial_setup(filename=Blob("models", initial_model_filename), tn=tn, dtype=dtype,
                                             space_order=so, nbl=nbl)
 
-    solver_params = {'h5_file': initial_model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                     'nbl': nbl}
+    solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn, 'space_order': so, 'dtype': dtype,
+                     'datakey': 'm0', 'nbl': nbl}
     shots_container = "shots-iso"
     solver = overthrust_solver_iso(**solver_params)
 
