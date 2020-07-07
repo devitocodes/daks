@@ -1,5 +1,8 @@
 import click
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    print("Failed to import matplotlib. Plotting will not work")
 import numpy as np
 import time
 
