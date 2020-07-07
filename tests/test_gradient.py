@@ -109,7 +109,7 @@ def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm):
         error1[i] = np.absolute(F_i - F0)
         # Second order term r Phi(m0+dm) - Phi(m0) - <J(m0)^T \delta d, dm>
         error2[i] = np.absolute(F_i - F0 - H[i] * G)
-    plot_errors(error1, error2, H)
+
     # Test slope of the  tests
     p1 = np.polyfit(np.log10(H), np.log10(error1), 1)
     p2 = np.polyfit(np.log10(H), np.log10(error2), 1)
