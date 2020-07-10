@@ -16,9 +16,9 @@ def load_shot(num, container="shots"):
 def save_shot(shot_id, data, src_coords, dt, container="shots"):
     bio = io.BytesIO()
     with h5py.File(bio, 'w') as f:
-        f['data'] = data
-        f['src_coords'] = src_coords
-        f['dt'] = dt
+        f.create_dataset("data", data=data, dtype=data.dtype)
+        f.create_dataset("src_coords", data=src_coords, dtype=src_coords.dtype)
+        f.create_dataset('dt', data=dt, dtype=src_coords.dtype)
 
     blob_from_bytes(Blob(container, "shot_%s.h5" % str(shot_id)),
                     bio.getvalue())
