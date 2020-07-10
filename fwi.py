@@ -40,7 +40,13 @@ profiler = Profiler()
 def run(initial_model_filename, final_solution_basename, tn, nshots, shots_container, so, nbl, kernel, checkpointing,
         n_checkpoints, compression, tolerance):
     dtype = np.float32
-    model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl)
+    water_depth = 20  # Number of points at the top of the domain that correspond to water
+    exclude_boundaries = True  # Exclude the boundary regions from the optimisation problem
+    scale_gradient = True  # Scale the gradient (pointwise) to be between 0-1
+    mute_water = True  # Mute the gradient in the water region
+
+    model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl,
+                                            datakey="m0", exclude_boundaries=exclude_boundaries, water_depth=water_depth)
 
     solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
                      'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl}
@@ -48,21 +54,33 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     client = setup_dask()
 
     solver = overthrust_solver_iso(**solver_params)
+    solver._dt = 1.75
+    solver.geometry.resample(1.75)
 
-    f_args = [model, geometry, nshots, client, solver, shots_container]
+    f_args = [nshots, client, solver, shots_container, scale_gradient, mute_water, exclude_boundaries, water_depth]
 
-    v0 = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
+    if exclude_boundaries:
+        v0 = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
+    else:
+        v0 = mat2vec(model.vp.data).astype(np.float64)
 
-    def callback(final_solution_basename, vec):
+    def callback(final_solution_basename, model, exclude_boundaries, vec):
         callback.call_count += 1
         fwi_iteration = callback.call_count
         filename = "%s_%d.h5" % (final_solution_basename, fwi_iteration)
-        with profiler.get_timer('io', 'write_progress'):
+        if exclude_boundaries:
             to_hdf5(vec2mat(vec, model.shape), filename)
+        else:
+            to_hdf5(vec2mat(vec, model.vp.shape), filename)
+
+        from examples.seismic import plot_velocity
+        plt.clf()
+        plot_velocity(solver.model)
+        plt.savefig("progress/fwi-iter%d.pdf" % (fwi_iteration))
 
     callback.call_count = 0
 
-    partial_callback = partial(callback, final_solution_basename)
+    partial_callback = partial(callback, final_solution_basename, model, exclude_boundaries)
 
     fwi_gradient.call_count = 0
 
@@ -73,7 +91,10 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
                                callback=partial_callback, bounds=bounds,
                                options={'disp': True, 'maxiter': 60})
 
-    final_model = vec2mat(solution_object.x, model.vp.shape)
+    if exclude_boundaries:
+        final_model = vec2mat(solution_object.x, model.shape)
+    else:
+        final_model = vec2mat(solution_object.x, model.vp.shape)
 
     true_model = overthrust_model_iso("overthrust_3D_true_model_2D.h5", datakey="m", dtype=dtype, space_order=so, nbl=nbl)
     true_model_vp = clip_boundary_and_numpy(true_model.vp.data, true_model.nbl)
@@ -92,17 +113,29 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     to_hdf5(final_model, '%s_final.h5' % final_solution_basename)
 
 
-def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
+def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0", exclude_boundaries=True, water_depth=20):
     model = overthrust_model_iso(filename, datakey=datakey, dtype=dtype, space_order=space_order, nbl=nbl)
 
     geometry = create_geometry(model, tn)
+    nbl = model.nbl
 
-    clipped_model = clip_boundary_and_numpy(model.vp, model.nbl)
-    vmax = np.ones(clipped_model.shape) * 6.5
-    vmin = np.ones(clipped_model.shape) * 1.3
+    if exclude_boundaries:
+        v = clip_boundary_and_numpy(model.vp, model.nbl)
+    else:
+        v = model.vp.data
 
-    vmax[:, 0:20] = clipped_model[:, 0:20]
-    vmin[:, 0:20] = clipped_model[:, 0:20]
+    # Define physical constraints on velocity - we know the maximum and minimum velocities we are expecting
+    vmax = np.ones(v.shape) * 6.5
+    vmin = np.ones(v.shape) * 1.3
+
+    # Constrain the velocity for the water region. We know the velocity of water beforehand.
+    if exclude_boundaries:
+        vmax[:, 0:water_depth] = v[:, 0:water_depth]
+        vmin[:, 0:water_depth] = v[:, 0:water_depth]
+    else:
+        vmax[:, 0:water_depth+nbl] = v[:, 0:water_depth+nbl]
+        vmin[:, 0:water_depth+nbl] = v[:, 0:water_depth+nbl]
+
     b = Bounds(mat2vec(vmin), mat2vec(vmax))
 
     return model, geometry, b
@@ -110,7 +143,7 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0"):
 
 # This runs on the dask worker in the cloud.
 # Anything passed into or returned from this function will be serialised and sent over the network.
-def fwi_gradient_shot(vp_in, i, solver, shots_container):
+def fwi_gradient_shot(vp_in, i, solver, shots_container, exclude_boundaries=True):
     rec_data, source_location, old_dt = load_shot(i, container=shots_container)
 
     solver.geometry.src_positions[0, :] = source_location[:]
@@ -119,7 +152,8 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
     # TODO: Change to built-in
     rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
 
-    rec0, u0, _ = solver.forward(save=True, dt=solver.model.critical_dt)
+    dt = 1.75
+    rec0, u0, _ = solver.forward(save=True, dt=dt)
 
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
                         time_range=solver.geometry.time_axis,
@@ -127,7 +161,10 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
 
     objective = .5*np.linalg.norm(residual.data.ravel())**2
 
-    grad, _ = solver.gradient(residual, u=u0)
+    grad, _ = solver.gradient(residual, u=u0, dt=dt)
+
+    if exclude_boundaries:
+        grad = clip_boundary_and_numpy(grad, solver.model.nbl)
 
     dtype = solver.model.dtype
 
@@ -137,28 +174,36 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container):
     return objective, np.array(grad.data, dtype=dtype)
 
 
-def fwi_gradient(vp_in, model, geometry, nshots, client, solver, shots_container):
+def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=True,
+                 mute_water=True, exclude_boundaries=True, water_depth=20):
     fwi_gradient.call_count += 1
 
     start_time = time.time()
-    vp_in = np.array(vec2mat(vp_in, model.shape), dtype=solver.model.dtype)
 
-    f_vp_in = client.scatter(vp_in)  # Dask enforces this for large arrays
+    if exclude_boundaries:
+        vp_in = np.array(vec2mat(vp_in, solver.model.shape), dtype=solver.model.dtype)
+    else:
+        vp_in = np.array(vec2mat(vp_in, solver.model.vp.shape), dtype=solver.model.dtype)
+
+    # Dask enforces this for large objects
+    f_vp_in = client.scatter(vp_in, broadcast=True)
+    f_solver = client.scatter(solver, broadcast=True)
 
     solver.model.update("vp", vp_in)
 
-    f_solver = client.scatter(solver)
     futures = []
 
     for i in range(nshots):
-        futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, f_solver, shots_container,
+        futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, f_solver, shots_container, exclude_boundaries,
                                      resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
-        # futures.append(fwi_gradient_shot(vp_in, i, solver_params))
 
-    shape = model.vp.shape
+    if exclude_boundaries:
+        gradient_shape = solver.model.shape
+    else:
+        gradient_shape = solver.model.vp.shape
 
     def reduction(*args):
-        grad = np.zeros(shape)  # Closured from above
+        grad = np.zeros(gradient_shape)  # Closured from above
         objective = 0.
 
         for a in args:
@@ -172,20 +217,23 @@ def fwi_gradient(vp_in, model, geometry, nshots, client, solver, shots_container
     wait(reduce_future)
 
     objective, grad = reduce_future.result()
-    # objective, grad = reduction(*futures)
+
+    if mute_water:
+        if exclude_boundaries:
+            muted_depth = water_depth
+        else:
+            muted_depth = water_depth + solver.model.nbl
+        grad[:, 0:muted_depth] = 0
+
+    # Scipy LBFGS misbehaves if type is not float64
+    grad = mat2vec(grad).astype(np.float64)
+
+    if scale_gradient:
+        grad /= np.max(np.abs(grad))
+
     elapsed_time = time.time() - start_time
     print("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
 
-    # Scipy LBFGS misbehaves if type is not float64
-    grad = mat2vec(clip_boundary_and_numpy(grad, solver.model.nbl)).astype(np.float64)
-    # grad /= np.max(np.abs(grad)) # Scale the gradient
-
-    from examples.seismic import plot_velocity
-    model.update('vp', vp_in)
-
-    plt.clf()
-    plot_velocity(model)
-    plt.savefig("progress/fwi-iter%d.pdf" % (fwi_gradient.call_count))
     return objective, -grad
 
 
