@@ -1,6 +1,6 @@
 import numpy as np
 import click
-from overthrust import overthrust_model_iso, overthrust_solver_iso
+from overthrust import overthrust_model_density, overthrust_solver_density
 from azureio import create_container
 from fwiio import save_shot, Blob
 from distributed import wait
@@ -18,7 +18,7 @@ def run(model_filename, tn, nshots, so, nbl, container):
 
     dtype = np.float32
 
-    model = overthrust_model_iso(Blob("models", model_filename), datakey="m", dtype=dtype, space_order=so, nbl=nbl)
+    model = overthrust_model_density(Blob("models", model_filename), datakey="m", dtype=dtype, space_order=so, nbl=nbl)
 
     create_container(container)
 
@@ -35,6 +35,7 @@ def run(model_filename, tn, nshots, so, nbl, container):
         futures.append(client.submit(generate_shot, (i, src_coords[i]),
                                      solver_params=solver_params, container=container,
                                      filename=model_filename, resources={'tasks': 1}))
+
     wait(futures)
 
     results = [f.result() for f in futures]
@@ -59,9 +60,9 @@ def generate_shot(shot_info, solver_params, filename, container):
     shot_id, src_coords = shot_info
     solver_params['src_coordinates'] = src_coords
 
-    solver = overthrust_solver_iso(Blob("models", filename), **solver_params)
+    solver = overthrust_solver_density(Blob("models", filename), **solver_params)
 
-    rec, u, _ = solver.forward(dt=solver.model.critical_dt)
+    rec, u, _ = solver.forward(dt=1.75)  # solver.model.critical_dt)
 
     save_shot(shot_id, rec.data, src_coords, solver.geometry.dt, container=container)
     return True
