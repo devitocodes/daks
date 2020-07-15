@@ -15,7 +15,7 @@ def fwi_gradient_local(vp_in, model, geometry, nshots, solver, shots_container):
     grad = np.zeros(model.vp.shape)
 
     for i in range(nshots):
-        o, g = fwi_gradient_shot(vp_in, i, solver, shots_container)
+        o, g = fwi_gradient_shot(vp_in, i, solver, shots_container, exclude_boundaries=False)
         objective += o
         grad += g
 

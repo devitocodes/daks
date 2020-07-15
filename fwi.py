@@ -48,10 +48,10 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl,
                                             datakey="m0", exclude_boundaries=exclude_boundaries, water_depth=water_depth)
 
+    client = setup_dask()
+
     solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
                      'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl}
-
-    client = setup_dask()
 
     solver = overthrust_solver_iso(**solver_params)
     solver._dt = 1.75
@@ -176,8 +176,6 @@ def fwi_gradient_shot(vp_in, i, solver, shots_container, exclude_boundaries=True
 
 def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=True,
                  mute_water=True, exclude_boundaries=True, water_depth=20):
-    fwi_gradient.call_count += 1
-
     start_time = time.time()
 
     if exclude_boundaries:
