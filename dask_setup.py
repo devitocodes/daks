@@ -10,7 +10,7 @@ def setup_dask():
         raise ValueError("DASK_SERVER_IP not set")
     server_address = os.environ['DASK_SERVER_IP']
     client = Client('%s:8786' % server_address)
-
+    client.restart()
     for f in files_to_upload:
         print("Uploading %s" % f)
         client.upload_file(f)

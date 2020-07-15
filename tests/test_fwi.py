@@ -1,19 +1,23 @@
 import numpy as np
 from fwi import fwi_gradient, initial_setup, mat2vec, clip_boundary_and_numpy, vec2mat, fwi_gradient_shot
 from dask_setup import setup_dask
+from fwiio import Blob
+from overthrust import overthrust_solver_iso
 
 
-def fwi_gradient_local(vp_in, model, geometry, nshots, solver_params):
-    vp_in = vec2mat(vp_in, model)
+def fwi_gradient_local(vp_in, nshots, solver, shots_container):
+    model = solver.model
+
+    vp_in = vec2mat(vp_in, model.shape)
 
     assert(model.shape == vp_in.shape)
 
     objective = 0.
 
-    grad = np.zeros(model.shape)
+    grad = np.zeros(model.vp.shape)
 
     for i in range(nshots):
-        o, g = fwi_gradient_shot(vp_in, i, solver_params)
+        o, g = fwi_gradient_shot(vp_in, i, solver, shots_container, exclude_boundaries=False)
         objective += o
         grad += g
 
@@ -22,17 +26,21 @@ def fwi_gradient_local(vp_in, model, geometry, nshots, solver_params):
 
 def test_equivalence_local_remote_single_shot():
     initial_model_filename, tn, dtype, so, nbl = "overthrust_3D_initial_model_2D.h5", 4000, np.float32, 6, 40
-    model, geometry, bounds = initial_setup(filename=initial_model_filename, tn=tn, dtype=dtype, space_order=so, nbl=nbl)
+    model, _, bounds = initial_setup(filename=Blob("models", initial_model_filename), tn=tn, dtype=dtype,
+                                     space_order=so, nbl=nbl)
 
-    solver_params = {'filename': initial_model_filename, 'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                     'nbl': nbl, 'origin': model.origin, 'spacing': model.spacing}
+    solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn, 'space_order': so, 'dtype': dtype,
+                     'datakey': 'm0', 'nbl': nbl}
+    shots_container = "shots-iso"
+    solver = overthrust_solver_iso(**solver_params)
 
-    clipped_vp = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl))
+    v0 = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
 
-    local_results = fwi_gradient_local(clipped_vp, model, geometry, 1, solver_params)
+    local_results = fwi_gradient_local(v0, 1, solver, shots_container)
 
     client = setup_dask()
-    remote_results = fwi_gradient(clipped_vp, model, geometry, 1, client, solver_params)
+    fwi_gradient.call_count = 0
+    remote_results = fwi_gradient(v0, 1, client, solver, shots_container)
 
     assert(np.isclose(local_results[0], remote_results[0], rtol=1e-4))
 
@@ -45,6 +53,10 @@ def test_vec2mat():
     mat = vec.reshape(shape)
 
     assert(np.array_equal(mat, vec2mat(vec, shape)))
+
+    back = mat2vec(mat)
+
+    assert(np.array_equal(back, vec))
 
 # ToTest: initial_setup, mat2vec, fwi_gradient_shot, clip_boundary_and_numpy
 

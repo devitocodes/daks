@@ -188,7 +188,9 @@ def laplacian(field, m, s, irho):
 class DensityModel(Model):
     def __init__(self, origin, spacing, shape, space_order, vp, irho=None, nbl=20,
                  dtype=np.float32, subdomains=(), bcs="mask", grid=None, **kwargs):
-        super(DensityModel, self).__init__(origin=origin, spacing=spacing, shape=shape, space_order=space_order, vp=vp, nbl=nbl, dtype=dtype,
-                                           subdomains=subdomains, bcs=bcs, grid=grid, **kwargs)
+        super(DensityModel, self).__init__(origin=origin, spacing=spacing, shape=shape,
+                                           space_order=space_order, vp=vp, nbl=nbl,
+                                           dtype=dtype, subdomains=subdomains, bcs=bcs,
+                                           grid=grid, **kwargs)
 
         self.irho = self._gen_phys_param(irho, 'irho', space_order)

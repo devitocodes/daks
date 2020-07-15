@@ -32,7 +32,9 @@ def run(model_filename, tn, nshots, so, nbl, container):
 
     futures = []
     for i in range(nshots):
-        futures.append(client.submit(generate_shot, (i, src_coords[i]), solver_params=solver_params, container=container, filename=model_filename, resources={'tasks': 1}))
+        futures.append(client.submit(generate_shot, (i, src_coords[i]),
+                                     solver_params=solver_params, container=container,
+                                     filename=model_filename, resources={'tasks': 1}))
 
     wait(futures)
 
@@ -60,7 +62,7 @@ def generate_shot(shot_info, solver_params, filename, container):
 
     solver = overthrust_solver_density(Blob("models", filename), **solver_params)
 
-    rec, u, _ = solver.forward()
+    rec, u, _ = solver.forward(dt=1.75)  # solver.model.critical_dt)
 
     save_shot(shot_id, rec.data, src_coords, solver.geometry.dt, container=container)
     return True

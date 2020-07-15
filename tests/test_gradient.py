@@ -1,19 +1,20 @@
 import numpy as np
 from numpy import linalg
 
-from devito import Function, info, error, TimeFunction
+from devito import Function, info
 
-from examples.seismic import Model, Receiver
-from examples.seismic.acoustic import AcousticWaveSolver
-from overthrust import overthrust_solver_iso, overthrust_model_iso, create_geometry
-from fwi import initial_setup
-from util import mat2vec, clip_boundary_and_numpy, vec2mat
+from examples.seismic import Receiver
+from overthrust import overthrust_solver_iso, overthrust_model_iso
+from fwi import fwi_gradient_shot
+from fwiio import load_shot
+from util import mat2vec
+from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as setup
 
 
 class TestGradient(object):
 
     def test_gradientFWI(self):
-        r"""
+        """
         This test ensures that the FWI gradient computed with devito
         satisfies the Taylor expansion property:
         .. math::
@@ -26,152 +27,109 @@ class TestGradient(object):
             \delta d = F(m0+ h dm) - D \\
         with F the Forward modelling operator.
         """
-        initial_model_filename = "overthrust_3D_initial_model_2D.h5"
         true_model_filename = "overthrust_3D_true_model_2D.h5"
-
+        initial_model_filename = "overthrust_3D_initial_model_2D.h5"
         tn = 4000
-
         dtype = np.float32
-
-        so = 6
-
+        so = 8
         nbl = 40
-
-        shots_container = "shots-iso"
-
-        shot_id = 10
-
-        ##########
-
+        shot_id = 20
+        shots_container = "shots-iso-40-nbl-40-so-8"
         model0 = overthrust_model_iso(initial_model_filename, datakey="m0",
                                       dtype=dtype, space_order=so, nbl=nbl)
 
         model_t = overthrust_model_iso(true_model_filename, datakey="m",
                                        dtype=dtype, space_order=so, nbl=nbl)
 
-        _, geometry, _ = initial_setup(initial_model_filename, tn, dtype, so, nbl, datakey="m0")
-        # rec, source_location, old_dt = load_shot(shot_id,
-        #                                         container=shots_container)
-        source_location = geometry.src_positions
+        rec, source_location, _ = load_shot(shot_id, container=shots_container)
         solver_params = {'h5_file': initial_model_filename, 'tn': tn,
                          'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                         'nbl': nbl, 'origin': model0.origin,
-                         'spacing': model0.spacing,
-                         'shots_container': shots_container,
+                         'nbl': nbl,
                          'src_coordinates': source_location}
-
         solver = overthrust_solver_iso(**solver_params)
 
-        true_solver_params = solver_params.copy()
+        v = model_t.vp.data
+        v0 = model0.vp
+        dm = np.float64(v**(-2) - v0.data**(-2))
 
-        true_solver_params['h5_file'] = true_model_filename
-        true_solver_params['datakey'] = "m"
+        F0, gradient = fwi_gradient_shot(v0.data, shot_id, solver, shots_container)
 
-        solver_true = overthrust_solver_iso(**true_solver_params)
-
-        rec, _, _ = solver_true.forward()
-
-        v0 = mat2vec(clip_boundary_and_numpy(model0.vp.data, model0.nbl))
-
-        v_t = mat2vec(clip_boundary_and_numpy(model_t.vp.data, model_t.nbl))
-
-        dm = np.float64(v_t**(-2) - v0**(-2))
-
-        print("dm", np.linalg.norm(dm), dm.shape)
-
-        F0, gradient = fwi_gradient_shot(vec2mat(v0, model0.shape),
-                                         shot_id, solver_params, source_location)
-
-        G = np.dot(gradient.reshape(-1), dm.reshape(-1))
-
-        # FWI Gradient test
-        H = [0.5, 0.25, .125, 0.0625, 0.0312, 0.015625, 0.0078125]
-        error1 = np.zeros(7)
-        error2 = np.zeros(7)
-        for i in range(0, 7):
-            # Add the perturbation to the model
-            vloc = np.sqrt(v0**2 * v_t**2 /
-                           ((1 - H[i]) * v_t**2 + H[i] * v0**2))
-            m = Model(vp=vloc, nbl=nbl, space_order=so, dtype=dtype, shape=model0.shape,
-                      origin=model0.origin, spacing=model0.spacing, bcs="damp")
-            # Data for the new model
-            d = solver.forward(vp=m.vp)[0]
-            # First order error Phi(m0+dm) - Phi(m0)
-            F_i = .5*linalg.norm((d.data - rec.data).reshape(-1))**2
-            error1[i] = np.absolute(F_i - F0)
-            # Second order term r Phi(m0+dm) - Phi(m0) - <J(m0)^T \delta d, dm>
-            error2[i] = np.absolute(F_i - F0 - H[i] * G)
-            print(i, F0, F_i, H[i]*G)
-
-        # Test slope of the  tests
-        p1 = np.polyfit(np.log10(H), np.log10(error1), 1)
-        p2 = np.polyfit(np.log10(H), np.log10(error2), 1)
-        info('1st order error, Phi(m0+dm)-Phi(m0): %s' % (p1))
-        info(r'2nd order error, Phi(m0+dm)-Phi(m0) - <J(m0)^T \delta d, dm>: %s' % (p2))
-        print("Error 1:")
-        print(error1)
-        print("***")
-        print("Error 2:")
-        print(error2)
-        assert np.isclose(p1[0], 1.0, rtol=0.1)
-        assert np.isclose(p2[0], 2.0, rtol=0.1)
+        basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 
 
-def fwi_gradient_shot(vp_in, i, solver_params, source_location):
-    error("Initialising solver")
-    tn = solver_params['tn']
-    nbl = solver_params['nbl']
-    space_order = solver_params['space_order']
-    dtype = solver_params['dtype']
-    origin = solver_params['origin']
-    spacing = solver_params['spacing']
-    true_model_filename = "overthrust_3D_true_model_2D.h5"
-    # shots_container = solver_params['shots_container']
+def from_scratch_gradient_test(shape=(70, 70), kernel='OT2', space_order=6):
+    spacing = tuple(10. for _ in shape)
+    wave = setup(shape=shape, spacing=spacing, dtype=np.float64,
+                 kernel=kernel, space_order=space_order,
+                 nbl=40)
+    v0 = Function(name='v0', grid=wave.model.grid, space_order=space_order)
+    smooth(v0, wave.model.vp)
+    v = wave.model.vp.data
 
-    # true_d, source_location, old_dt = load_shot(i, container=shots_container)
+    dm = np.float64(v**(-2) - v0.data**(-2))
 
-    true_solver_params = solver_params.copy()
+    # Compute receiver data for the true velocity
+    rec, _, _ = wave.forward()
 
-    true_solver_params['h5_file'] = true_model_filename
-    true_solver_params['datakey'] = "m"
+    # Compute receiver data and full wavefield for the smooth velocity
+    rec0, u0, _ = wave.forward(vp=v0, save=True)
 
-    solver_true = overthrust_solver_iso(**true_solver_params)
+    # Objective function value
+    F0 = .5*linalg.norm(rec0.data - rec.data)**2
 
-    true_d, _, _ = solver_true.forward()
+    # Gradient: <J^T \delta d, dm>
+    residual = Receiver(name='rec', grid=wave.model.grid, data=rec0.data - rec.data,
+                        time_range=wave.geometry.time_axis,
+                        coordinates=wave.geometry.rec_positions)
 
-    model = Model(vp=vp_in, nbl=nbl, space_order=space_order, dtype=dtype, shape=vp_in.shape,
-                  origin=origin, spacing=spacing, bcs="damp")
-    geometry = create_geometry(model, tn, source_location)
+    gradient, _ = wave.jacobian_adjoint(residual, u0, vp=v0)
+    v0 = v0.data
+    basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm)
 
-    error("tn: %d, nt: %d, dt: %f" % (geometry.tn, geometry.nt, geometry.dt))
 
-    # error("Reinterpolate shot from %d samples to %d samples" % (true_d.shape[0], geometry.nt))
-    # true_d = reinterpolate(true_d, geometry.nt, old_dt)
+def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm):
 
-    solver = AcousticWaveSolver(model, geometry, kernel='OT2', nbl=nbl,
-                                space_order=space_order, dtype=dtype)
+    G = np.dot(mat2vec(gradient.data), dm.reshape(-1))
 
-    grad = Function(name="grad", grid=model.grid)
+    # FWI Gradient test
+    H = [0.5, 0.25, .125, 0.0625, 0.0312, 0.015625, 0.0078125]
+    error1 = np.zeros(7)
+    error2 = np.zeros(7)
+    for i in range(0, 7):
+        # Add the perturbation to the model
+        def initializer(data):
+            data[:] = np.sqrt(v0**2 * v**2 /
+                              ((1 - H[i]) * v**2 + H[i] * v0**2))
+        vloc = Function(name='vloc', grid=wave.model.grid, space_order=space_order,
+                        initializer=initializer)
+        # Data for the new model
+        d = wave.forward(vp=vloc, dt=wave.model.critical_dt)[0]
+        # First order error Phi(m0+dm) - Phi(m0)
+        F_i = .5*linalg.norm((d.data - rec.data).reshape(-1))**2
+        error1[i] = np.absolute(F_i - F0)
+        # Second order term r Phi(m0+dm) - Phi(m0) - <J(m0)^T \delta d, dm>
+        error2[i] = np.absolute(F_i - F0 - H[i] * G)
 
-    residual = Receiver(name='rec', grid=model.grid,
-                        time_range=geometry.time_axis,
-                        coordinates=geometry.rec_positions)
+    # Test slope of the  tests
+    p1 = np.polyfit(np.log10(H), np.log10(error1), 1)
+    p2 = np.polyfit(np.log10(H), np.log10(error2), 1)
+    info('1st order error, Phi(m0+dm)-Phi(m0): %s' % (p1))
+    info(r'2nd order error, Phi(m0+dm)-Phi(m0) - <J(m0)^T \delta d, dm>: %s' % (p2))
+    assert np.isclose(p1[0], 1.0, rtol=0.1)
+    assert np.isclose(p2[0], 2.0, rtol=0.1)
 
-    u0 = TimeFunction(name='u', grid=model.grid, time_order=2, space_order=solver.space_order,
-                      save=geometry.nt)
 
-    error("Forward prop")
-    smooth_d, _, _ = solver.forward(save=True, u=u0)
-    error("Misfit")
-    residual.data[:] = smooth_d.data[:] - true_d.data[:]
-
-    objective = .5*np.linalg.norm(residual.data.ravel())**2
-    error("Gradient")
-    solver.gradient(rec=residual, u=u0, grad=grad)
-
-    grad = clip_boundary_and_numpy(grad.data, model.nbl)
-
-    return objective, -grad
+def plot_errors(error1, error2, H):
+    import matplotlib.pyplot as plt
+    plt.plot(H, error1, label="error1")
+    plt.plot(H, error2, label="error2")
+    plt.legend()
+    plt.xscale('log', basex=2)
+    plt.yscale('log', basey=2)
+    plt.title('Gradient test')
+    plt.xlabel('H')
+    plt.ylabel('error')
+    plt.show()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,6 @@
+*.h5
+*.pdf
+*.csv
+*.png
+__pycache__/
+*.blob
