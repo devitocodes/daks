@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from overthrust import overthrust_solver_iso
+from fwi.overthrust import overthrust_solver_iso
 
 
 @pytest.mark.parametrize('kernel', ['OT2', 'OT4'])
