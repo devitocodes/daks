@@ -134,6 +134,8 @@ def test_equivalence_checkpointing():
     print(o1, np.linalg.norm(grad1), grad1.shape)
     print(o2, np.linalg.norm(grad2), grad2.shape)
 
+    # grad1[k, k] for k in range(40)
+
     np.testing.assert_approx_equal(o1, o2, significant=6)
 
     np.testing.assert_array_almost_equal(grad1, grad2)

@@ -52,7 +52,7 @@ class TestGradient(object):
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
 
-        F0, gradient = process_shot(v0.data, shot_id, solver, shots_container)
+        F0, gradient = process_shot(shot_id, solver, shots_container, exclude_boundaries=False)
 
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 

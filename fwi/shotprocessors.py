@@ -21,7 +21,7 @@ def process_shot(i, solver, shots_container, exclude_boundaries=True):
     # TODO: Change to built-in
     rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
 
-    dt = 1.75
+    dt = solver.model.critical_dt  # 1.75
     rec0, u0, _ = solver.forward(save=True, dt=dt)
     print("vanilla")
     print("true_d", np.linalg.norm(rec))
@@ -51,7 +51,7 @@ def process_shot_checkpointed(i, solver, shots_container, exclude_boundaries=Tru
     so = solver.space_order
     geometry = solver.geometry
     time_order = 2
-    dt = 1.75
+    dt = solver.model.critical_dt  # 1.75
     nt = solver.geometry.time_axis.num - time_order
     if checkpoint_params is not None:
         n_checkpoints = checkpoint_params.pop('n_checkpoints', 1000)
@@ -84,6 +84,7 @@ def process_shot_checkpointed(i, solver, shots_container, exclude_boundaries=Tru
     print("Source", solver.geometry.src.coordinates.data, "Receiver", np.linalg.norm(residual.coordinates.data))
     wrap_fw = CheckpointOperator(fwd_op, src=solver.geometry.src, u=u, rec=smooth_d, dt=dt, vp=solver.model.vp)
     wrap_rev = CheckpointOperator(rev_op, u=u, v=v, rec=residual, grad=grad, dt=dt, vp=solver.model.vp)
+    print(wrap_rev.op.arguments(**wrap_rev._prepare_args(0, 1)))
     wrp = Revolver(cp, wrap_fw, wrap_rev, n_checkpoints, nt, compression_params=compression_params)
     wrp.apply_forward()
 

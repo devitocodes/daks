@@ -4,8 +4,9 @@ import traceback
 from distributed import Client
 from zipfile import ZipFile
 
-files_to_upload = {'fwi': ['azureio.py', 'io.py', 'solvers.py', 'overthrust.py', 'run.py'],
+files_to_upload = {'fwi': ['__init__.py', 'azureio.py', 'io.py', 'shotprocessors.py', 'solvers.py', 'overthrust.py', 'run.py'],
                    'util': ['__init__.py']}
+# Things don't work if every module doesn't have a __init__.py
 
 
 def setup_dask():
@@ -25,7 +26,7 @@ def setup_dask():
 def upload_modules(client, files_to_upload):
     for module, files in files_to_upload.items():
         with CompressedModule(module, files) as m:
-            print("Uploading %s" % module)
+            print("Uploading %s as %s" % (module, m))
             client.upload_file(m)
 
 
