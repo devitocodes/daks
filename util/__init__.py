@@ -6,6 +6,7 @@ import csv
 
 from scipy import interpolate
 from timeit import default_timer
+from devito import Function
 
 
 def write_results(data, results_file):
@@ -102,8 +103,9 @@ def vec2mat(vec, shape):
     return np.reshape(vec, shape)
 
 
-def clip_boundary_and_numpy(mat, nbl):
-    return np.array(mat.data[:])[nbl:-nbl, nbl:-nbl]
+def trim_boundary(mat, nbl):
+    assert(isinstance(mat, Function))
+    return mat.data[nbl:-nbl, nbl:-nbl]
 
 
 def reinterpolate(shot, new_nt, old_dt, order=3):

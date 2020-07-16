@@ -1,6 +1,7 @@
 import io
 import h5py
-from azureio import blob_from_bytes, load_blob_to_hdf5
+
+from fwi.azureio import blob_from_bytes, load_blob_to_hdf5
 
 
 def load_shot(num, container="shots"):

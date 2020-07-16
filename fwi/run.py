@@ -9,17 +9,12 @@ import time
 from distributed import wait
 from functools import partial
 from scipy.optimize import minimize, Bounds
-from util import write_results, to_hdf5
 
-from examples.seismic import Receiver
-
-from dask_setup import setup_dask
-from fwiio import load_shot, Blob
-from overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
-from util import Profiler, clip_boundary_and_numpy, mat2vec, vec2mat, reinterpolate
-
-
-profiler = Profiler()
+from fwi.dask import setup_dask
+from fwi.io import Blob
+from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
+from fwi.shotprocessors import process_shot, process_shot_checkpointed
+from util import trim_boundary, mat2vec, vec2mat, write_results, to_hdf5
 
 
 @click.command()
@@ -60,7 +55,7 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
     f_args = [nshots, client, solver, shots_container, scale_gradient, mute_water, exclude_boundaries, water_depth]
 
     if exclude_boundaries:
-        v0 = mat2vec(clip_boundary_and_numpy(model.vp.data, model.nbl)).astype(np.float64)
+        v0 = mat2vec(trim_boundary(model.vp.data, model.nbl)).astype(np.float64)
     else:
         v0 = mat2vec(model.vp.data).astype(np.float64)
 
@@ -97,7 +92,7 @@ def run(initial_model_filename, final_solution_basename, tn, nshots, shots_conta
         final_model = vec2mat(solution_object.x, model.vp.shape)
 
     true_model = overthrust_model_iso("overthrust_3D_true_model_2D.h5", datakey="m", dtype=dtype, space_order=so, nbl=nbl)
-    true_model_vp = clip_boundary_and_numpy(true_model.vp.data, true_model.nbl)
+    true_model_vp = trim_boundary(true_model.vp.data, true_model.nbl)
 
     error_norm = np.linalg.norm(true_model_vp - final_model)
     print(error_norm)
@@ -120,7 +115,7 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0", exclude_b
     nbl = model.nbl
 
     if exclude_boundaries:
-        v = clip_boundary_and_numpy(model.vp, model.nbl)
+        v = trim_boundary(model.vp, model.nbl)
     else:
         v = model.vp.data
 
@@ -141,41 +136,8 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0", exclude_b
     return model, geometry, b
 
 
-# This runs on the dask worker in the cloud.
-# Anything passed into or returned from this function will be serialised and sent over the network.
-def fwi_gradient_shot(vp_in, i, solver, shots_container, exclude_boundaries=True):
-    rec_data, source_location, old_dt = load_shot(i, container=shots_container)
-
-    solver.geometry.src_positions[0, :] = source_location[:]
-    solver.model.update("vp", vp_in)
-
-    # TODO: Change to built-in
-    rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
-
-    dt = 1.75
-    rec0, u0, _ = solver.forward(save=True, dt=dt)
-
-    residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
-                        time_range=solver.geometry.time_axis,
-                        coordinates=solver.geometry.rec_positions)
-
-    objective = .5*np.linalg.norm(residual.data.ravel())**2
-
-    grad, _ = solver.gradient(residual, u=u0, dt=dt)
-
-    if exclude_boundaries:
-        grad = clip_boundary_and_numpy(grad, solver.model.nbl)
-
-    dtype = solver.model.dtype
-
-    del vp_in
-    del solver
-
-    return objective, np.array(grad.data, dtype=dtype)
-
-
-def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=True,
-                 mute_water=True, exclude_boundaries=True, water_depth=20):
+def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=True, mute_water=True,
+                 exclude_boundaries=True, water_depth=20, checkpointing=False, checkpoint_params=None):
     start_time = time.time()
 
     if exclude_boundaries:
@@ -183,17 +145,20 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
     else:
         vp_in = np.array(vec2mat(vp_in, solver.model.vp.shape), dtype=solver.model.dtype)
 
-    # Dask enforces this for large objects
-    f_vp_in = client.scatter(vp_in, broadcast=True)
-    f_solver = client.scatter(solver, broadcast=True)
-
     solver.model.update("vp", vp_in)
+
+    # Dask enforces this for large objects
+    f_solver = client.scatter(solver, broadcast=True)
 
     futures = []
 
     for i in range(nshots):
-        futures.append(client.submit(fwi_gradient_shot, f_vp_in, i, f_solver, shots_container, exclude_boundaries,
-                                     resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
+        if checkpointing:
+            futures.append(client.submit(process_shot_checkpointed, i, f_solver, shots_container, exclude_boundaries,
+                                         checkpoint_params, resources={'tasks': 1}))
+        else:
+            futures.append(client.submit(process_shot, i, f_solver, shots_container, exclude_boundaries,
+                                         resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
 
     if exclude_boundaries:
         gradient_shape = solver.model.shape
