@@ -1,4 +1,8 @@
 import h5py
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    print("Failed to import matplotlib. Plotting will not work")
 import numpy as np
 import socket
 import os
@@ -7,6 +11,8 @@ import csv
 from scipy import interpolate
 from timeit import default_timer
 from devito import Function
+
+from examples.seismic import plot_velocity
 
 
 def write_results(data, results_file):
@@ -136,3 +142,9 @@ def m_to_vp(m):
 
 def vp_to_m(vp):
     return 1./vp**2
+
+
+def plot_model_to_file(model, filename):
+    plt.clf()
+    plot_velocity(model)
+    plt.savefig(filename)
