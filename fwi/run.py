@@ -10,7 +10,7 @@ from distributed import wait
 from functools import partial
 from scipy.optimize import minimize, Bounds
 
-from fwi.dask import setup_dask
+from fwi.dasksetup import setup_dask
 from fwi.io import Blob
 from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
 from fwi.shotprocessors import process_shot, process_shot_checkpointed
