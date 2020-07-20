@@ -8,7 +8,7 @@ services:
       context: .
       dockerfile: ./kubernetes/Dockerfile
     image: daks-base
-    mem_limit: 4G
+    mem_limit: 10G
     environment:
       DEVITO_ARCH: gcc
       DEVITO_LANGUAGE: openmp
