@@ -5,5 +5,6 @@ azure-storage-blob==2.1.0
 devito
 dask==2.20.0
 distributed==2.20.0
-numpy
+numpy==1.19.0
+cloudpickle==1.5.0
 tikzplotlib
