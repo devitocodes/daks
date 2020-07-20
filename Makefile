@@ -27,3 +27,11 @@ overthrust_3D_true_model.h5.blob: overthrust_3D_true_model.h5 util/uploader.py
 
 overthrust_3D_initial_model_2D.h5.blob: overthrust_3D_initial_model_2D.h5 util/uploader.py
 	python util/uploader.py --filename overthrust_3D_initial_model_2D.h5 --container models && touch overthrust_3D_initial_model_2D.h5.blob
+
+fwi_experiment: fwi_lossy
+
+fwi_reference:
+	python fwi/run.py --results-dir fwi_reference --nshots 80 --shots-container shots-rho-80-so-8 --so 6
+
+fwi_lossy: fwi_reference
+
