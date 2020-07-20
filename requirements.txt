@@ -6,4 +6,4 @@ devito
 dask==2.20.0
 distributed==2.20.0
 numpy
-
+tikzplotlib
