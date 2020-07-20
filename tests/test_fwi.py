@@ -1,6 +1,6 @@
 import numpy as np
 from fwi.run import initial_setup, fwi_gradient
-from fwi.dask import setup_dask
+from fwi.dasksetup import setup_dask
 from fwi.io import Blob
 from fwi.overthrust import overthrust_solver_iso
 from fwi.shotprocessors import process_shot, process_shot_checkpointed
