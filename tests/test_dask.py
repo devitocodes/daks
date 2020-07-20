@@ -1,6 +1,6 @@
 from distributed import wait
 
-from fwi.dask import setup_dask
+from fwi.dasksetup import setup_dask
 
 
 def test_dask_upload():
