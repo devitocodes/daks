@@ -70,30 +70,36 @@ def test_equivalence_shot_checkpointing():
     dtype = np.float32
     so = 6
     nbl = 40
-    exclude_boundaries = False
+    exclude_boundaries = True
     water_depth = 20
     shot_id = 1
 
     shots_container = "shots-iso"
 
     solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
-                     'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl}
+                     'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl,
+                     'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000})}
 
-    solver = overthrust_solver_iso(**solver_params)
+    solver1 = overthrust_solver_iso(**solver_params)
+    solver2 = overthrust_solver_iso(**solver_params)
 
     model, geometry, _ = initial_setup(initial_model_filename, tn, dtype, so, nbl,
                                        datakey="m0", exclude_boundaries=exclude_boundaries,
                                        water_depth=water_depth)
-
-    o1, grad1 = process_shot_checkpointed(shot_id, solver, shots_container, exclude_boundaries)
-
-    o2, grad2 = process_shot(shot_id, solver, shots_container, exclude_boundaries)
+    o2, grad2 = process_shot(shot_id, solver1, shots_container, exclude_boundaries)
+    o1, grad1 = process_shot_checkpointed(shot_id, solver2, shots_container, exclude_boundaries)
 
     print(o1, np.linalg.norm(grad1), grad1.shape)
     print(o2, np.linalg.norm(grad2), grad2.shape)
-    np.testing.assert_approx_equal(o1, o2, significant=5)
 
-    np.testing.assert_array_almost_equal(grad1, grad2)
+    grad1_diag = [grad1[k, k] for k in range(40)]
+    grad2_diag = [grad2[k, k] for k in range(40)]
+
+    print(grad1_diag)
+    print(grad2_diag)
+
+    np.testing.assert_approx_equal(o1, o2, significant=5)
+    assert(np.allclose(grad1, grad2, rtol=1e-4))
 
 
 def test_equivalence_checkpointing():
@@ -102,7 +108,7 @@ def test_equivalence_checkpointing():
     dtype = np.float32
     so = 6
     nbl = 40
-    exclude_boundaries = False
+    exclude_boundaries = True
     water_depth = 20
     nshots = 1
     client = setup_dask()
@@ -134,11 +140,15 @@ def test_equivalence_checkpointing():
     print(o1, np.linalg.norm(grad1), grad1.shape)
     print(o2, np.linalg.norm(grad2), grad2.shape)
 
-    # grad1[k, k] for k in range(40)
+    grad1_diag = [grad1[k, k] for k in range(40)]
+    grad2_diag = [grad2[k, k] for k in range(40)]
 
-    np.testing.assert_approx_equal(o1, o2, significant=6)
+    print(grad1_diag)
+    print(grad2_diag)
 
-    np.testing.assert_array_almost_equal(grad1, grad2)
+    np.testing.assert_approx_equal(o1, o2, significant=5)
+
+    np.testing.assert_array_almost_equal(grad1, grad2, significant=5)
 
 
 if __name__ == "__main__":

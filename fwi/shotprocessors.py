@@ -23,18 +23,16 @@ def process_shot(i, solver, shots_container, exclude_boundaries=True):
 
     dt = solver.model.critical_dt  # 1.75
     rec0, u0, _ = solver.forward(save=True, dt=dt)
-    print("vanilla")
-    print("true_d", np.linalg.norm(rec))
-    print("smooth_d", np.linalg.norm(rec0.data))
-    print("src", np.linalg.norm(solver.geometry.src.data))
+
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
                         time_range=solver.geometry.time_axis,
                         coordinates=solver.geometry.rec_positions)
-
+    print(solver.geometry.src.coordinates.data)
+    print('rec', np.linalg.norm(residual.coordinates.data))
     objective = .5*np.linalg.norm(residual.data.ravel())**2
-    print("Source", solver.geometry.src.coordinates.data, "Receiver", np.linalg.norm(residual.coordinates.data))
+
     grad, _ = solver.gradient(residual, u=u0, dt=dt)
-    print("grad", np.linalg.norm(grad.data))
+
     # Prepare for serialization before returning
     if exclude_boundaries:
         grad = trim_boundary(grad, solver.model.nbl)
@@ -61,16 +59,13 @@ def process_shot_checkpointed(i, solver, shots_container, exclude_boundaries=Tru
         compression_params = None
 
     # Create symbols to hold the gradient and residual
-    grad = Function(name="grad", grid=model.grid, space_order=so)
-    vp = Function(name="vp", grid=model.grid, space_order=so)
+    grad = Function(name="grad", grid=model.grid)
 
     smooth_d = Receiver(name='rec', grid=model.grid, time_range=geometry.time_axis, coordinates=geometry.rec_positions)
     residual = Receiver(name='rec', grid=model.grid, time_range=geometry.time_axis, coordinates=geometry.rec_positions)
 
     u = TimeFunction(name='u', grid=model.grid, time_order=time_order, space_order=so)
     v = TimeFunction(name='v', grid=model.grid, time_order=time_order, space_order=so)
-
-    vp.data[:] = solver.model.vp.data[:]
 
     fwd_op = solver.op_fwd(save=False)
     rev_op = solver.op_grad(save=False)
@@ -81,17 +76,11 @@ def process_shot_checkpointed(i, solver, shots_container, exclude_boundaries=Tru
     # Update source location
     solver.geometry.src_positions[0, :] = source_location[:]
 
-    print("Source", solver.geometry.src.coordinates.data, "Receiver", np.linalg.norm(residual.coordinates.data))
     wrap_fw = CheckpointOperator(fwd_op, src=solver.geometry.src, u=u, rec=smooth_d, dt=dt, vp=solver.model.vp)
     wrap_rev = CheckpointOperator(rev_op, u=u, v=v, rec=residual, grad=grad, dt=dt, vp=solver.model.vp)
-    print(wrap_rev.op.arguments(**wrap_rev._prepare_args(0, 1)))
+
     wrp = Revolver(cp, wrap_fw, wrap_rev, n_checkpoints, nt, compression_params=compression_params)
     wrp.apply_forward()
-
-    print("checkpointed")
-    print("true_d", np.linalg.norm(true_d.data))
-    print("smooth_d", np.linalg.norm(smooth_d.data))
-    print("src", np.linalg.norm(solver.geometry.src.data))
 
     # Compute gradient from data residual and update objective function
     residual.data[:] = smooth_d.data[:] - true_d[:]
@@ -99,8 +88,6 @@ def process_shot_checkpointed(i, solver, shots_container, exclude_boundaries=Tru
     objective = .5*np.linalg.norm(residual.data.ravel())**2
     wrp.apply_reverse()
 
-    print(wrp.profiler.summary())
-    print("grad", np.linalg.norm(grad.data))
     # Prepare for serialization before returning
     if exclude_boundaries:
         grad = trim_boundary(grad, solver.model.nbl)
