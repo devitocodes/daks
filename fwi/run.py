@@ -13,7 +13,7 @@ from distributed import wait
 from functools import partial
 from scipy.optimize import minimize, Bounds
 
-from fwi.dasksetup import setup_dask
+from fwi.dasksetup import setup_dask, reset_cluster
 from fwi.io import Blob
 from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
 from fwi.shotprocessors import process_shot, process_shot_checkpointed
@@ -201,6 +201,7 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
 
     if not hasattr(fwi_gradient, "objective_function_history"):
         fwi_gradient.objective_function_history = []
+    reset_cluster(client)
 
     if exclude_boundaries:
         vp_in = np.array(vec2mat(vp_in, solver.model.shape), dtype=solver.model.dtype)

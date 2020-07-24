@@ -9,6 +9,11 @@ files_to_upload = {'fwi': ['__init__.py', 'azureio.py', 'io.py', 'shotprocessors
 # Things don't work if every module doesn't have a __init__.py
 
 
+def reset_cluster(client):
+    client.restart()
+    upload_modules(client, files_to_upload)
+
+
 def setup_dask():
     if "DASK_SERVER_IP" not in os.environ:
         raise ValueError("DASK_SERVER_IP not set")
@@ -16,17 +21,12 @@ def setup_dask():
     server_address = os.environ['DASK_SERVER_IP']
     client = Client('%s:8786' % server_address)
 
-    client.restart()
-
-    upload_modules(client, files_to_upload)
-
     return client
 
 
 def upload_modules(client, files_to_upload):
     for module, files in files_to_upload.items():
         with CompressedModule(module, files) as m:
-            print("Uploading %s as %s" % (module, m))
             client.upload_file(m)
 
 
@@ -44,7 +44,8 @@ class CompressedModule(object):
             traceback.print_exception(exc_type, exc_value, tb)
             return False
         else:
-            os.remove(self.compressed)
+            # Commented to be able to run multiple problems in parallel on the same filesystem
+            # os.remove(self.compressed)
             return True
 
     def compress(self):
