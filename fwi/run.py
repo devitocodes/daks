@@ -17,7 +17,7 @@ from fwi.dasksetup import setup_dask
 from fwi.io import Blob
 from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
 from fwi.shotprocessors import process_shot, process_shot_checkpointed
-from util import trim_boundary, mat2vec, vec2mat, write_results, to_hdf5, plot_model_to_file
+from util import trim_boundary, mat2vec, vec2mat, write_results, to_hdf5, plot_model_to_file, eprint
 
 
 plt.style.use("ggplot")
@@ -267,7 +267,7 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
     fwi_gradient.objective_function_history.append(objective)
 
     elapsed_time = time.time() - start_time
-    print("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
+    eprint("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
 
     return objective, -grad
 

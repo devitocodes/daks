@@ -1,3 +1,4 @@
+from __future__ import print_function
 import h5py
 try:
     import matplotlib.pyplot as plt
@@ -7,6 +8,8 @@ import numpy as np
 import socket
 import os
 import csv
+
+import sys
 
 from scipy import interpolate
 from timeit import default_timer
@@ -148,3 +151,7 @@ def plot_model_to_file(model, filename):
     plt.clf()
     plot_velocity(model)
     plt.savefig(filename)
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
