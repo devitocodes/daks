@@ -84,6 +84,12 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     def callback(progress_dir, intermediates_dir, model, exclude_boundaries, vec):
         global plot_model_to_file
         callback.call_count += 1
+
+        if not hasattr(callback, "obj_fn_history"):
+            callback.obj_fn_history = []
+
+        callback.obj_fn_history.append(fwi_gradient.obj_fn_cache[vec.tobytes()])
+
         fwi_iteration = callback.call_count
         filename = os.path.join(intermediates_dir, "solution%d.h5" % fwi_iteration)
         if exclude_boundaries:
@@ -119,10 +125,11 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     plot_model_to_file(solver.model, final_plot_filename)
 
     # Save objective function values to CSV
+    obj_fn_history = callback.obj_fn_history
     obj_fn_vals_filename = os.path.join(results_dir, "objective_function_values.csv")
     with open(obj_fn_vals_filename, "w") as vals_file:
         vals_writer = csv.writer(vals_file)
-        for r in fwi_gradient.objective_function_history:
+        for r in obj_fn_history:
             vals_writer.writerow([r])
 
     # Plot objective function values
@@ -130,9 +137,11 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     plt.xlabel("Iteration number")
     plt.ylabel("Objective function value")
     obj_fun_plt_filename = os.path.join(results_dir, "convergence.tex")
+    obj_fun_plt_pdf_filename = os.path.join(results_dir, "convergence.pdf")
 
+    plt.clf()
     if reference_solution is None:
-        plt.plot(fwi_gradient.objective_function_history)
+        plt.plot(obj_fn_history)
     else:
         # Load reference solution convergence history
         with open(reference_solution, 'r') as reference_file:
@@ -143,15 +152,15 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
         # Pad with 0s to ensure same size
 
         # Plot with legends
-        plt.plot(fwi_gradient.objective_function_history, label="Lossy FWI")
+        plt.plot(obj_fn_history, label="Lossy FWI")
         plt.plot(reference_solution_values, label="Reference FWI")
         # Display legend
         plt.legend()
-
+    plt.savefig(obj_fun_plt_pdf_filename)
     tikzplotlib.save(obj_fun_plt_filename)
 
     true_model = overthrust_model_iso("overthrust_3D_true_model_2D.h5", datakey="m", dtype=dtype, space_order=so, nbl=nbl)
-    true_model_vp = trim_boundary(true_model.vp.data, true_model.nbl)
+    true_model_vp = trim_boundary(true_model.vp, true_model.nbl)
 
     error_norm = np.linalg.norm(true_model_vp - final_model)
     print("L2 norm of final solution vs true solution: %f" % error_norm)
@@ -201,16 +210,17 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
                  exclude_boundaries=True, water_depth=20, checkpointing=False, checkpoint_params=None):
     start_time = time.time()
 
-    if not hasattr(fwi_gradient, "objective_function_history"):
-        fwi_gradient.objective_function_history = []
     reset_cluster(client)
 
-    if exclude_boundaries:
-        vp_in = np.array(vec2mat(vp_in, solver.model.shape), dtype=solver.model.dtype)
-    else:
-        vp_in = np.array(vec2mat(vp_in, solver.model.vp.shape), dtype=solver.model.dtype)
+    if not hasattr(fwi_gradient, "obj_fn_cache"):
+        fwi_gradient.obj_fn_cache = {}
 
-    solver.model.update("vp", vp_in)
+    if exclude_boundaries:
+        vp = np.array(vec2mat(vp_in, solver.model.shape), dtype=solver.model.dtype)
+    else:
+        vp = np.array(vec2mat(vp_in, solver.model.vp.shape), dtype=solver.model.dtype)
+
+    solver.model.update("vp", vp)
 
     # Dask enforces this for large objects
     f_solver = client.scatter(solver, broadcast=True)
@@ -267,7 +277,7 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
         else:
             raise ValueError("Invalid value %s for gradient scaling. Allowed: None, L, W" % scale_gradient)
 
-    fwi_gradient.objective_function_history.append(objective)
+    fwi_gradient.obj_fn_cache[vp_in.tobytes()] = objective
 
     elapsed_time = time.time() - start_time
     eprint("Objective function evaluation completed in %f seconds. F=%f" % (elapsed_time, objective))
