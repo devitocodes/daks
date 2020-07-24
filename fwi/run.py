@@ -33,6 +33,8 @@ plt.style.use("ggplot")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
 @click.option("--kernel", default="OT2", help="Computation kernel to use (options: OT2, OT4)")
+@click.option("--scale-gradient", default=None, type=click.Choice([None, 'L', 'W']),
+              help="Scale the gradient passed to LBFGS")
 @click.option("--checkpointing/--no-checkpointing", default=False, help="Enable/disable checkpointing")
 @click.option("--n-checkpoints", default=1000, type=int, help="Number of checkpoints to use")
 @click.option("--compression", default=None, type=click.Choice([None, 'zfp', 'sz', 'blosc']),
@@ -40,12 +42,11 @@ plt.style.use("ggplot")
 @click.option("--tolerance", default=None, type=int, help="Error tolerance for lossy compression, used as 10^-t")
 @click.option("--reference-solution", default=None, type=str,
               help="Objective function history file for reference solution (to include in convergence plots)")
-def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nbl, kernel, checkpointing,
+def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nbl, kernel, scale_gradient, checkpointing,
         n_checkpoints, compression, tolerance, reference_solution):
     dtype = np.float32
-    water_depth = 20  # Number of points at the top of the domain that correspond to water
+    water_depth = 22  # Number of points at the top of the domain that correspond to water
     exclude_boundaries = True  # Exclude the boundary regions from the optimisation problem
-    scale_gradient = True  # Scale the gradient (pointwise) to be between 0-1
     mute_water = True  # Mute the gradient in the water region
 
     model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl,
@@ -194,7 +195,7 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0", exclude_b
     return model, geometry, b
 
 
-def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=True, mute_water=True,
+def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=None, mute_water=True,
                  exclude_boundaries=True, water_depth=20, checkpointing=False, checkpoint_params=None):
     start_time = time.time()
 
@@ -252,8 +253,16 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
     # Scipy LBFGS misbehaves if type is not float64
     grad = mat2vec(grad).astype(np.float64)
 
-    if scale_gradient:
-        grad /= np.max(np.abs(grad))
+    if scale_gradient is not None:
+        if scale_gradient == "W":
+            if not hasattr(fwi_gradient, "gradient_scaling_factor"):
+                fwi_gradient.gradient_scaling_factor = np.max(np.abs(grad))
+
+            grad /= fwi_gradient.gradient_scaling_factor
+        elif scale_gradient == "L":
+            grad /= np.max(np.abs(grad))
+        else:
+            raise ValueError("Invalid value %s for gradient scaling. Allowed: None, L, W" % scale_gradient)
 
     fwi_gradient.objective_function_history.append(objective)
 
