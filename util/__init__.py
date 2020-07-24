@@ -1,11 +1,21 @@
+from __future__ import print_function
 import h5py
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    print("Failed to import matplotlib. Plotting will not work")
 import numpy as np
 import socket
 import os
 import csv
 
+import sys
+
 from scipy import interpolate
 from timeit import default_timer
+from devito import Function
+
+from examples.seismic import plot_velocity
 
 
 def write_results(data, results_file):
@@ -102,8 +112,9 @@ def vec2mat(vec, shape):
     return np.reshape(vec, shape)
 
 
-def clip_boundary_and_numpy(mat, nbl):
-    return np.array(mat.data[:])[nbl:-nbl, nbl:-nbl]
+def trim_boundary(mat, nbl):
+    assert(isinstance(mat, Function))
+    return mat.data[nbl:-nbl, nbl:-nbl]
 
 
 def reinterpolate(shot, new_nt, old_dt, order=3):
@@ -134,3 +145,13 @@ def m_to_vp(m):
 
 def vp_to_m(vp):
     return 1./vp**2
+
+
+def plot_model_to_file(model, filename):
+    plt.clf()
+    plot_velocity(model)
+    plt.savefig(filename)
+
+
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)

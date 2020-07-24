@@ -4,9 +4,9 @@ from numpy import linalg
 from devito import Function, info
 
 from examples.seismic import Receiver
-from overthrust import overthrust_solver_iso, overthrust_model_iso
-from fwi import fwi_gradient_shot
-from fwiio import load_shot
+from fwi.overthrust import overthrust_solver_iso, overthrust_model_iso
+from fwi.shotprocessors import process_shot
+from fwi.io import load_shot
 from util import mat2vec
 from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as setup
 
@@ -52,7 +52,7 @@ class TestGradient(object):
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
 
-        F0, gradient = fwi_gradient_shot(v0.data, shot_id, solver, shots_container)
+        F0, gradient = process_shot(shot_id, solver, shots_container, exclude_boundaries=False)
 
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 

@@ -4,19 +4,19 @@ import h5py
 from examples.seismic import AcquisitionGeometry, Model
 from examples.seismic.acoustic import AcousticWaveSolver
 
-from azureio import load_blob_to_hdf5
-from fwiio import Blob
-from solvers import DensityWaveSolver, DensityModel
+from fwi.azureio import load_blob_to_hdf5
+from fwi.io import Blob
+from fwi.solvers import DensityWaveSolver, DensityModel
 
 
 def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
-                          space_order=2, datakey='m0', nbl=40, dtype=np.float32):
+                          space_order=2, datakey='m0', nbl=40, dtype=np.float32, **kwargs):
     model = overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype)
 
     geometry = create_geometry(model, tn, src_coordinates)
 
     solver = AcousticWaveSolver(model, geometry, kernel=kernel,
-                                space_order=space_order, dtype=dtype)
+                                space_order=space_order, dtype=dtype, **kwargs)
     return solver
 
 
