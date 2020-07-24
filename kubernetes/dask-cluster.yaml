@@ -1,9 +1,18 @@
-apiVersion: apps/v1beta1
+---
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: devito-server
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app: devito-server
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
   template:
     metadata:
       labels:
@@ -12,15 +21,16 @@ spec:
       nodeSelector:
         "beta.kubernetes.io/os": linux
       containers:
-      - name: devito-server
-        image: devitoaks.azurecr.io/daks-base:v6
-        command: ['/venv/bin/dask-scheduler']
-        ports:
-        - containerPort: 8786
-          name: devito-server
-        - containerPort: 8787
-          name: daskdashboard
+        - name: devito-server
+          image: devitoaks.azurecr.io/daks-base:v7
+          command: ['/venv/bin/dask-scheduler']
+          ports:
+            - containerPort: 8786
+              name: devito-server
+            - containerPort: 8787
+              name: daskdashboard
 ---
+
 apiVersion: v1
 kind: Service
 metadata:
@@ -28,16 +38,16 @@ metadata:
 spec:
   type: LoadBalancer
   ports:
-  - name: aaa
-    port: 8786
-    targetPort: 8786
-  - name: bbb
-    port: 8787
-    targetPort: 8787
+    - name: aaa
+      port: 8786
+      targetPort: 8786
+    - name: bbb
+      port: 8787
+      targetPort: 8787
   selector:
     app: devito-server
 ---
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: devito-worker
@@ -47,7 +57,10 @@ spec:
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 1
-  minReadySeconds: 5 
+  minReadySeconds: 5
+  selector:
+    matchLabels:
+      app: devito-worker
   template:
     metadata:
       labels:
@@ -56,28 +69,28 @@ spec:
       nodeSelector:
         "beta.kubernetes.io/os": linux
       containers:
-      - name: devito-worker
-        env:
-        - name: PYTHONPATH
-          value: /app
-        - name: DEVITO_LANGUAGE
-          value: "openmp"
-        - name: DEVITO_LOGGING
-          value: "INFO"
-        - name: OMP_PROC_BIND
-          value: "TRUE"
-        - name: "OMP_PLACES"
-          value: "cores"
-        - name: "OMP_NUM_THREADS"
-          value: "3"
-        image: devitoaks.azurecr.io/daks-base:v6
-        command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '5G', '--resources', 'tasks=1', '--nprocs', '1', '--nthreads', '1']
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            memory: 5G
-            cpu: 3
-          limits:
-            memory: 5G
-            cpu: 3
+        - name: devito-worker
+          env:
+            - name: PYTHONPATH
+              value: /app
+            - name: DEVITO_LANGUAGExf
+              value: "openmp"
+            - name: DEVITO_LOGGING
+              value: "DEBUG"
+            - name: OMP_PROC_BIND
+              value: "TRUE"
+            - name: "OMP_PLACES"
+              value: "cores"
+            - name: "OMP_NUM_THREADS"
+              value: "3"
+          image: devitoaks.azurecr.io/daks-base:v7
+          command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '0', '--resources', 'tasks=1', '--nprocs', '1', '--nthreads', '1']
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: 6G
+              cpu: 3
+            limits:
+              memory: 6G
+              cpu: 3
