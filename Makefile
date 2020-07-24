@@ -31,7 +31,7 @@ overthrust_3D_initial_model_2D.h5.blob: overthrust_3D_initial_model_2D.h5 util/u
 fwi_experiment: fwi_lossy
 
 fwi_reference:
-	python fwi/run.py --results-dir fwi_reference --nshots 80 --shots-container shots-rho-80-so-8 --so 6
+	python fwi/run.py --results-dir fwi_reference --nshots 80 --shots-container shots-rho-80-so-8 --so 8
 
 fwi_lossy: fwi_reference
 
