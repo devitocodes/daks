@@ -21,14 +21,13 @@ def process_shot(i, solver, shots_container, exclude_boundaries=True):
     # TODO: Change to built-in
     rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
 
-    dt = solver.model.critical_dt  # 1.75
+    dt = 1.75
     rec0, u0, _ = solver.forward(save=True, dt=dt)
 
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
                         time_range=solver.geometry.time_axis,
                         coordinates=solver.geometry.rec_positions)
-    print(solver.geometry.src.coordinates.data)
-    print('rec', np.linalg.norm(residual.coordinates.data))
+
     objective = .5*np.linalg.norm(residual.data.ravel())**2
 
     grad, _ = solver.gradient(residual, u=u0, dt=dt)
@@ -40,6 +39,9 @@ def process_shot(i, solver, shots_container, exclude_boundaries=True):
         grad = grad.data
 
     grad = np.array(grad, dtype=solver.model.dtype)
+
+    del u0
+    del solver
 
     return objective, grad
 

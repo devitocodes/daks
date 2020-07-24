@@ -71,6 +71,8 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
                      'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl}
 
     solver = overthrust_solver_iso(**solver_params)
+    solver._dt = 1.75
+    solver.geometry.resample(1.75)
 
     f_args = [nshots, client, solver, shots_container, scale_gradient, mute_water, exclude_boundaries, water_depth]
 
