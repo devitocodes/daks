@@ -1,10 +1,10 @@
 import numpy as np
 import click
-from overthrust import overthrust_model_density, overthrust_solver_density
+from fwi.overthrust import overthrust_model_density, overthrust_solver_density
 from azureio import create_container
-from fwiio import save_shot, Blob
+from fwi.io import save_shot, Blob
 from distributed import wait
-from dask_setup import setup_dask
+from fwi.dasksetup import setup_dask
 
 
 @click.command()
