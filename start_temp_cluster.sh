@@ -11,7 +11,7 @@ RUN=$1
 VM_TYPE=$2
 
 CLUSTERNAME=compression$RUN
-DIRNAME=fwi_zfpw$RUN
+DIRNAME=lower_bound
 export DEVITO_LOGGING=ERROR
 
 echo Provisioning AKS...
@@ -52,7 +52,7 @@ do
     fi
 done
 sleep 30
-docker-compose run -e DASK_SERVER_IP=$DASK_IP -w /app/daks daks /venv/bin/python -u fwi/run.py --results-dir $DIRNAME --nshots 80 --shots-container shots-rho-80-so-8 --so 8 --scale-gradient W --checkpointing --compression zfp --tolerance $RUN --reference-solution fwi_referenceL/objective_function_values.csv 2>&1 | tee $DIRNAME/output.txt
+docker-compose run -e DASK_SERVER_IP=$DASK_IP -w /app/daks daks /bin/bash
 
 echo All done. Deleting resources
 
