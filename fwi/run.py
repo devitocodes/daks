@@ -24,8 +24,8 @@ plt.style.use("ggplot")
 
 
 @click.command()
-@click.option("--initial-model-filename", default="overthrust_3D_initial_model_2D.h5",
-              help="File to read the initial model from")
+@click.option("--initial-model-filename", type=(str, str), default=("overthrust_3D_initial_model_2D.h5", "m0"),
+              help="File (and key) to read the initial model from")
 @click.option("--results-dir", default="fwiresults", help="Directory for results")
 @click.option("--tn", default=4000, type=int, help="Number of timesteps to run")
 @click.option("--nshots", default=20, type=int, help="Number of shots (already decided when generating shots)")
@@ -49,8 +49,10 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     exclude_boundaries = True  # Exclude the boundary regions from the optimisation problem
     mute_water = True  # Mute the gradient in the water region
 
+    initial_model_filename, datakey = initial_model_filename
+
     model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl,
-                                            datakey="m0", exclude_boundaries=exclude_boundaries, water_depth=water_depth)
+                                            datakey=datakey, exclude_boundaries=exclude_boundaries, water_depth=water_depth)
 
     client = setup_dask()
 
@@ -68,7 +70,7 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
         os.mkdir(progress_dir)
 
     solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
-                     'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl}
+                     'space_order': so, 'dtype': dtype, 'datakey': datakey, 'nbl': nbl}
 
     solver = overthrust_solver_iso(**solver_params)
     solver._dt = 1.75
