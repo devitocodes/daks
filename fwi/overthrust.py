@@ -20,19 +20,20 @@ def overthrust_solver_iso(h5_file, kernel='OT2', tn=4000, src_coordinates=None,
     return solver
 
 
-def overthrust_model_iso(h5_file, datakey, space_order, nbl, dtype):
+def overthrust_model_iso(h5_file, datakey, space_order=2, nbl=40, dtype=np.float32):
     model_params = from_hdf5(h5_file, datakey, space_order=space_order, nbl=nbl,
                              dtype=dtype, bcs="damp")
 
     return Model(**model_params)
 
 
-def overthrust_model_density(h5_file, datakey, space_order, nbl, dtype):
+def overthrust_model_density(h5_file, datakey, space_order, nbl, dtype, water_depth=20):
     model_params = from_hdf5(h5_file, datakey, space_order=space_order,
                              nbl=nbl, dtype=dtype, bcs="damp")
     data_vp = model_params['vp']
     data_rho = 0.31 * (1e3*data_vp)**0.25
     data_irho = 1/data_rho
+    data_irho[:, 0:water_depth+nbl] = 1.
     model_params['irho'] = data_irho
 
     return DensityModel(**model_params)
