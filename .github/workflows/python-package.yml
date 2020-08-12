@@ -8,7 +8,8 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-
+env:
+  DASK_SERVER_IP: 52.190.25.183
 jobs:
   build:
 
@@ -28,12 +29,12 @@ jobs:
 
     - name: Test with pytest
       run: |
-        DASK_SERVER_IP=52.188.44.66 PYTHONPATH=$PYTHONPATH:$PWD py.test -svx tests/*
+        PYTHONPATH=$PYTHONPATH:$PWD py.test -svx tests/*
     
     - name: Run scripts
       run: |
         export PYTHONPATH=$PYTHONPATH:$PWD
-        DASK_SERVER_IP=52.188.44.66 python generate_shot_data.py
+        python generate_shot_data.py
         make overthrust_3D_initial_model_2D.h5
-        DASK_SERVER_IP=52.188.44.66 python fwi.py
+        python fwi.py
         python tests/test_gradient.py
