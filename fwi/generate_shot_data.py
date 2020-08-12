@@ -1,6 +1,6 @@
 import numpy as np
 import click
-from fwi.overthrust import overthrust_model_density, overthrust_solver_density
+from fwi.overthrust import overthrust_model_density, overthrust_solver_density, overthrust_solver_iso
 from azureio import create_container
 from fwi.io import save_shot, Blob
 from distributed import wait
@@ -13,18 +13,27 @@ from fwi.dasksetup import setup_dask
 @click.option("--nshots", default=20, type=int, help="Number of shots (already decided when generating shots)")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
-@click.option("--container", default="shots", type=str, help="Name of container to store generated shots")
-def run(model_filename, tn, nshots, so, nbl, container):
+@click.option("--shots-container", default="shots", type=str, help="Name of container to store generated shots")
+@click.option("--kernel", default="rho", help="Computational kernel to use", type=click.Choice(['OT2', 'OT4', 'rho']))
+@click.option("--dtype", default='float32', type=click.Choice(['float32', 'float64']),
+              help="Dtype to use in computation")
+def run(model_filename, tn, nshots, so, nbl, shots_container, kernel, dtype):
 
-    dtype = np.float32
+    if dtype == 'float32':
+        dtype = np.float32
+    elif dtype == 'float64':
+        dtype = np.float64
+    else:
+        raise ValueError("Invalid dtype")
 
     model = overthrust_model_density(Blob("models", model_filename), datakey="m", dtype=dtype, space_order=so, nbl=nbl)
 
-    create_container(container)
+    create_container(shots_container)
 
     client = setup_dask()
 
-    solver_params = {'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm', 'nbl': nbl}
+    solver_params = {'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm', 'nbl': nbl, 'water_depth': 20,
+                     'calculate_density': True, 'kernel': kernel, 'h5_file': Blob("models", model_filename)}
 
     src_coords = get_source_locations(model, nshots, dtype)
 
@@ -33,15 +42,15 @@ def run(model_filename, tn, nshots, so, nbl, container):
     futures = []
     for i in range(nshots):
         futures.append(client.submit(generate_shot, (i, src_coords[i]),
-                                     solver_params=solver_params, container=container,
-                                     filename=model_filename, resources={'tasks': 1}))
+                                     solver_params=solver_params, container=shots_container,
+                                     resources={'tasks': 1}))
 
     wait(futures)
 
     results = [f.result() for f in futures]
 
     if all(results):
-        print("Successfully generated %d shots and uploaded to blob storage container %s" % (nshots, container))
+        print("Successfully generated %d shots and uploaded to blob storage container %s" % (nshots, shots_container))
     else:
         raise Exception("Some error occurred. Please check remote logs (currently logs can't come to local system)")
 
@@ -56,11 +65,21 @@ def get_source_locations(model, nshots, dtype):
     return src_coords
 
 
-def generate_shot(shot_info, solver_params, filename, container):
+def generate_shot(shot_info, solver_params, container):
     shot_id, src_coords = shot_info
     solver_params['src_coordinates'] = src_coords
 
-    solver = overthrust_solver_density(Blob("models", filename), **solver_params)
+    kernel = solver_params['kernel']
+
+    if kernel in ['OT2', 'OT4']:
+        solver_params.pop('water_depth')
+        solver_params.pop('calculate_density')
+        solver = overthrust_solver_iso(**solver_params)
+    elif kernel == "rho":
+        solver_params.pop('kernel')
+        solver = overthrust_solver_density(**solver_params)
+    else:
+        raise ValueError("Invalid value for kernel: %s" % kernel)
 
     rec, u, _ = solver.forward(dt=1.75)  # solver.model.critical_dt)
 
