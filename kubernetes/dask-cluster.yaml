@@ -22,7 +22,7 @@ spec:
         "beta.kubernetes.io/os": linux
       containers:
         - name: devito-server
-          image: devitoaks.azurecr.io/daks-base:v7
+          image: devitoaks.azurecr.io/daks-base:v8
           command: ['/venv/bin/dask-scheduler']
           ports:
             - containerPort: 8786
@@ -73,7 +73,7 @@ spec:
           env:
             - name: PYTHONPATH
               value: /app
-            - name: DEVITO_LANGUAGExf
+            - name: DEVITO_LANGUAGE
               value: "openmp"
             - name: DEVITO_LOGGING
               value: "DEBUG"
@@ -82,15 +82,15 @@ spec:
             - name: "OMP_PLACES"
               value: "cores"
             - name: "OMP_NUM_THREADS"
-              value: "3"
-          image: devitoaks.azurecr.io/daks-base:v7
-          command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '0', '--resources', 'tasks=1', '--nprocs', '1', '--nthreads', '1']
+              value: "4"
+          image: devitoaks.azurecr.io/daks-base:v8
+          command: ['/venv/bin/dask-worker', 'tcp://devito-server:8786', '--memory-limit', '13G', '--resources', 'tasks=1', '--nprocs', '1', '--nthreads', '1']
           ports:
             - containerPort: 80
           resources:
             requests:
-              memory: 6G
-              cpu: 3
+              memory: 14G
+              cpu: 4
             limits:
-              memory: 6G
-              cpu: 3
+              memory: 14G
+              cpu: 4
