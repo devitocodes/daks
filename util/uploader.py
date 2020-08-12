@@ -1,6 +1,6 @@
 import click
 from tqdm import tqdm
-from azureio import upload_file_to_blob, create_container
+from fwi.azureio import upload_file_to_blob, create_container
 from azure.common import AzureMissingResourceHttpError
 
 
