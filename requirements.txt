@@ -8,3 +8,4 @@ distributed==2.20.0
 numpy==1.19.0
 cloudpickle==1.5.0
 tikzplotlib
+pyzfp
