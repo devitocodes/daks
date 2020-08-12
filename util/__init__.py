@@ -147,9 +147,9 @@ def vp_to_m(vp):
     return 1./vp**2
 
 
-def plot_model_to_file(model, filename):
+def plot_model_to_file(model, filename, cmap="jet"):
     plt.clf()
-    plot_velocity(model)
+    plot_velocity(model, cmap=cmap)
     plt.savefig(filename)
 
 
