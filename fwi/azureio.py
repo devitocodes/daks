@@ -1,14 +1,12 @@
 import h5py
 import io
+import os
 from azure.storage.blob import BlockBlobService
-
-azure_config = {'account_name': "navjot",
-                'account_key': "DVdnRplu5bEaPp/72sYOyTej72047cNVgggDhmd0YWQEYEDzVOhYUvhCfrdisynNEyHuEgLPvKkSIvIv77ICrg=="}
 
 
 def get_blob_service():
-    account_name = azure_config['account_name']
-    account_key = azure_config['account_key']
+    account_name = os.environ['BLOB_ACCOUNT_NAME']
+    account_key = os.environ['BLOB_ACCOUNT_KEY']
     return BlockBlobService(account_name=account_name, account_key=account_key)
 
 
