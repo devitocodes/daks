@@ -13,7 +13,7 @@ from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as
 
 class TestGradient(object):
 
-    def test_gradientFWI(self):
+    def test_gradientFWI(self, auth):
         """
         This test ensures that the FWI gradient computed with devito
         satisfies the Taylor expansion property:
@@ -41,7 +41,7 @@ class TestGradient(object):
         model_t = overthrust_model_iso(true_model_filename, datakey="m",
                                        dtype=dtype, space_order=so, nbl=nbl)
 
-        rec, source_location, _ = load_shot(shot_id, container=shots_container)
+        rec, source_location, _ = load_shot(shot_id, auth, container=shots_container)
         solver_params = {'h5_file': initial_model_filename, 'tn': tn,
                          'space_order': so, 'dtype': dtype, 'datakey': 'm0',
                          'nbl': nbl,
@@ -52,7 +52,7 @@ class TestGradient(object):
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
 
-        F0, gradient = process_shot(shot_id, solver, shots_container, exclude_boundaries=False)
+        F0, gradient = process_shot(shot_id, solver, shots_container, auth, exclude_boundaries=False)
 
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 

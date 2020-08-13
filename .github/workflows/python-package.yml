@@ -10,6 +10,8 @@ on:
     branches: [ master ]
 env:
   DASK_SERVER_IP: 52.190.25.183
+  BLOB_ACCOUNT_NAME: ${{ secrets.BLOB_ACCOUNT_NAME }}
+  BLOB_ACCOUNT_KEY: ${{ secrets.BLOB_ACCOUNT_KEY }}
 jobs:
   build:
 

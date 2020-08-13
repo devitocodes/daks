@@ -101,7 +101,7 @@ def test_shot(shot_id, shots_container, exclude_boundaries):
     assert(o1 == o2)
 
 
-def test_equivalence_shot_checkpointing(shots_container):
+def test_equivalence_shot_checkpointing(shots_container, auth):
     initial_model_filename = "overthrust_3D_initial_model_2D.h5"
     tn = 4000
     dtype = np.float32
@@ -111,7 +111,7 @@ def test_equivalence_shot_checkpointing(shots_container):
     water_depth = 20
     shot_id = 1
 
-    solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
+    solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
                      'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl,
                      'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000})}
 
@@ -121,8 +121,8 @@ def test_equivalence_shot_checkpointing(shots_container):
     model, geometry, _ = initial_setup(initial_model_filename, tn, dtype, so, nbl,
                                        datakey="m0", exclude_boundaries=exclude_boundaries,
                                        water_depth=water_depth)
-    o2, grad2 = process_shot(shot_id, solver1, shots_container, exclude_boundaries)
-    o1, grad1 = process_shot_checkpointed(shot_id, solver2, shots_container, exclude_boundaries)
+    o2, grad2 = process_shot(shot_id, solver1, shots_container, auth, exclude_boundaries)
+    o1, grad1 = process_shot_checkpointed(shot_id, solver2, shots_container, auth, exclude_boundaries)
 
     np.testing.assert_approx_equal(o1, o2, significant=5)
     assert(np.allclose(grad1, grad2, rtol=1e-4))
