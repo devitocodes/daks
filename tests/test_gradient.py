@@ -6,7 +6,7 @@ from devito import Function, info
 from examples.seismic import Receiver
 from fwi.overthrust import overthrust_solver_iso, overthrust_model_iso
 from fwi.shotprocessors import process_shot
-from fwi.io import load_shot
+from fwi.io import load_shot, Blob
 from util import mat2vec
 from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as setup
 
@@ -22,14 +22,14 @@ class TestGradient(object):
         nbl = 40
         shot_id = 20
         shots_container = "shots-iso-40-nbl-40-so-16"
-        model0 = overthrust_model_iso(initial_model_filename, datakey="m0",
+        model0 = overthrust_model_iso(Blob("models", initial_model_filename, auth=auth), datakey="m0",
                                       dtype=dtype, space_order=so, nbl=nbl)
 
-        model_t = overthrust_model_iso(true_model_filename, datakey="m",
+        model_t = overthrust_model_iso(Blob("models", true_model_filename, auth=auth), datakey="m",
                                        dtype=dtype, space_order=so, nbl=nbl)
 
         rec, source_location, _ = load_shot(shot_id, auth, container=shots_container)
-        solver_params = {'h5_file': initial_model_filename, 'tn': tn,
+        solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
                          'space_order': so, 'dtype': dtype, 'datakey': 'm0',
                          'nbl': nbl,
                          'src_coordinates': source_location}

@@ -118,7 +118,7 @@ def test_equivalence_shot_checkpointing(shots_container, auth):
     solver1 = overthrust_solver_iso(**solver_params)
     solver2 = overthrust_solver_iso(**solver_params)
 
-    model, geometry, _ = initial_setup(initial_model_filename, tn, dtype, so, nbl,
+    model, geometry, _ = initial_setup(Blob("models", initial_model_filename, auth=auth), tn, dtype, so, nbl,
                                        datakey="m0", exclude_boundaries=exclude_boundaries,
                                        water_depth=water_depth)
     o2, grad2 = process_shot(shot_id, solver1, shots_container, auth, exclude_boundaries)
