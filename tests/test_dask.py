@@ -43,6 +43,7 @@ def test_remote_devito(auth):
     rec1, u1, _ = solver2.forward()
     wait(future)
     rec2, u2, _ = future.result()
-
+    print(np.linalg.norm(rec1.data))
+    print(np.linalg.norm(rec2.data))
     assert(np.allclose(rec1.data, rec2.data, atol=0., rtol=0.))
     assert((u1.data == u2.data).all())

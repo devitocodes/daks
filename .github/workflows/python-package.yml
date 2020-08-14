@@ -17,10 +17,14 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build docker image
-      run: docker build -f kubernetes/Dockerfile -t devitocodes/daks:latest .
-    
+      run: docker build -f kubernetes/Dockerfile -t navjotk/daks_test:latest .
+    - name: Push to docker hub
+      run: |
+        docker login -u="${{ secrets.DOCKER_USERNAME }}" -p="${{ secrets.DOCKER_PASSWORD }}"
+        docker push navjotk/daks_test:latest
+        
     - name: Test with pytest
-      run: env > env_file && docker run --env-file env_file devitocodes/daks:latest py.test -svx tests/
+      run: env > env_file && docker run --env-file env_file navjotk/daks_test:latest py.test -svx tests/
     
     - name: Run scripts
       run: |
