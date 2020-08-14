@@ -1,4 +1,4 @@
-FROM devito_devito
+FROM  devitocodes/devito:cpu-dev
 
 COPY ./requirements.txt /app/requirements-daks.txt
 
