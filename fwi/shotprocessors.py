@@ -13,15 +13,17 @@ from util import reinterpolate, trim_boundary
 
 # This runs on the dask worker in the cloud.
 # Anything passed into or returned from this function will be serialised and sent over the network.
-def process_shot(i, solver, shots_container, exclude_boundaries=True):
-    rec_data, source_location, old_dt = load_shot(i, container=shots_container)
+def process_shot(i, solver, shots_container, auth, exclude_boundaries=True, dt=None):
+    rec_data, source_location, old_dt = load_shot(i, auth=auth, container=shots_container)
 
     solver.geometry.src_positions[0, :] = source_location[:]
 
     # TODO: Change to built-in
     rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
 
-    dt = 1.75
+    if dt is None:
+        dt = solver.model.critical_dt
+
     rec0, u0, _ = solver.forward(save=True, dt=dt)
 
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
@@ -46,7 +48,7 @@ def process_shot(i, solver, shots_container, exclude_boundaries=True):
     return objective, grad
 
 
-def process_shot_checkpointed(i, solver, shots_container, exclude_boundaries=True, checkpoint_params=None):
+def process_shot_checkpointed(i, solver, shots_container, auth, exclude_boundaries=True, checkpoint_params=None):
     model = solver.model
     so = solver.space_order
     geometry = solver.geometry
@@ -73,7 +75,7 @@ def process_shot_checkpointed(i, solver, shots_container, exclude_boundaries=Tru
     rev_op = solver.op_grad(save=False)
     cp = DevitoCheckpoint([u])
 
-    true_d, source_location, old_dt = load_shot(i, container=shots_container)
+    true_d, source_location, old_dt = load_shot(i, auth=auth, container=shots_container)
     true_d = reinterpolate(true_d, solver.geometry.nt, old_dt)
     # Update source location
     solver.geometry.src_positions[0, :] = source_location[:]

@@ -1,5 +1,7 @@
-FROM devito_devito
+FROM  devitocodes/devito:cpu-dev
 
-COPY ./requirements.txt /app/requirements-daks.txt
+COPY . daks/
 
-RUN /venv/bin/python3 -m pip install --upgrade pip && /venv/bin/pip install --no-cache-dir -r /app/requirements-daks.txt
+RUN /venv/bin/python3 -m pip install --upgrade pip && /venv/bin/pip install --no-cache-dir -r /app/daks/requirements.txt
+
+WORKDIR /app/daks/

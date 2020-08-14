@@ -6,43 +6,30 @@ from devito import Function, info
 from examples.seismic import Receiver
 from fwi.overthrust import overthrust_solver_iso, overthrust_model_iso
 from fwi.shotprocessors import process_shot
-from fwi.io import load_shot
+from fwi.io import load_shot, Blob
 from util import mat2vec
 from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as setup
 
 
 class TestGradient(object):
 
-    def test_gradientFWI(self):
-        """
-        This test ensures that the FWI gradient computed with devito
-        satisfies the Taylor expansion property:
-        .. math::
-            \Phi(m0 + h dm) = \Phi(m0) + \O(h) \\
-            \Phi(m0 + h dm) = \Phi(m0) + h \nabla \Phi(m0) + \O(h^2) \\
-            \Phi(m0) = .5* || F(m0 + h dm) - D ||_2^2
-        where
-        .. math::
-            \nabla \Phi(m0) = <J^T \delta d, dm> \\
-            \delta d = F(m0+ h dm) - D \\
-        with F the Forward modelling operator.
-        """
+    def test_gradientFWI(self, auth):
         true_model_filename = "overthrust_3D_true_model_2D.h5"
         initial_model_filename = "overthrust_3D_initial_model_2D.h5"
         tn = 4000
         dtype = np.float32
-        so = 8
+        so = 16
         nbl = 40
         shot_id = 20
-        shots_container = "shots-iso-40-nbl-40-so-8"
-        model0 = overthrust_model_iso(initial_model_filename, datakey="m0",
+        shots_container = "shots-iso-40-nbl-40-so-16"
+        model0 = overthrust_model_iso(Blob("models", initial_model_filename, auth=auth), datakey="m0",
                                       dtype=dtype, space_order=so, nbl=nbl)
 
-        model_t = overthrust_model_iso(true_model_filename, datakey="m",
+        model_t = overthrust_model_iso(Blob("models", true_model_filename, auth=auth), datakey="m",
                                        dtype=dtype, space_order=so, nbl=nbl)
 
-        rec, source_location, _ = load_shot(shot_id, container=shots_container)
-        solver_params = {'h5_file': initial_model_filename, 'tn': tn,
+        rec, source_location, _ = load_shot(shot_id, auth, container=shots_container)
+        solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
                          'space_order': so, 'dtype': dtype, 'datakey': 'm0',
                          'nbl': nbl,
                          'src_coordinates': source_location}
@@ -52,7 +39,7 @@ class TestGradient(object):
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
 
-        F0, gradient = process_shot(shot_id, solver, shots_container, exclude_boundaries=False)
+        F0, gradient = process_shot(shot_id, solver, shots_container, auth, exclude_boundaries=False)
 
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 

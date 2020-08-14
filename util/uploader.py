@@ -1,6 +1,8 @@
 import click
+
 from tqdm import tqdm
-from azureio import upload_file_to_blob, create_container
+from fwi.azureio import upload_file_to_blob, create_container
+from fwi.io import Blob, default_auth
 from azure.common import AzureMissingResourceHttpError
 
 
@@ -8,7 +10,7 @@ def upload_with_progressbar(filename, container, blob_name):
     with tqdm(total=100) as pbar:
         def update(done, total):
             pbar.update(done/total)
-        upload_file_to_blob(filename, container, blob_name, progress_callback=update)
+        upload_file_to_blob(filename, Blob(container, filename.split("/")[-1], auth=default_auth()), progress_callback=update)
 
 
 @click.command()

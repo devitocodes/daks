@@ -14,8 +14,8 @@ from functools import partial
 from scipy.optimize import minimize, Bounds
 
 from fwi.dasksetup import setup_dask, reset_cluster
-from fwi.io import Blob
-from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso
+from fwi.io import Blob, default_auth
+from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso, overthrust_solver_density
 from fwi.shotprocessors import process_shot, process_shot_checkpointed
 from util import trim_boundary, mat2vec, vec2mat, write_results, to_hdf5, plot_model_to_file, eprint
 
@@ -24,17 +24,18 @@ plt.style.use("ggplot")
 
 
 @click.command()
-@click.option("--initial-model-filename", default="overthrust_3D_initial_model_2D.h5",
-              help="File to read the initial model from")
+@click.option("--initial-model-filename", type=(str, str), default=("overthrust_3D_initial_model_2D.h5", "m0"),
+              help="File (and key) to read the initial model from")
 @click.option("--results-dir", default="fwiresults", help="Directory for results")
 @click.option("--tn", default=4000, type=int, help="Number of timesteps to run")
 @click.option("--nshots", default=20, type=int, help="Number of shots (already decided when generating shots)")
-@click.option("--shots-container", default="shots-iso", type=str, help="Name of container to read shots from")
+@click.option("--shots-container", default="shots", type=str, help="Name of container to read shots from")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
-@click.option("--kernel", default="OT2", help="Computation kernel to use (options: OT2, OT4)")
+@click.option("--kernel", default="OT2", help="Computational kernel to use", type=click.Choice(['OT2', 'OT4', 'rho']))
 @click.option("--scale-gradient", default=None, type=click.Choice([None, 'L', 'W']),
               help="Scale the gradient passed to LBFGS")
+@click.option("--max-iter", default=30, type=int, help="Maximum number of iterations")
 @click.option("--checkpointing/--no-checkpointing", default=False, help="Enable/disable checkpointing")
 @click.option("--n-checkpoints", default=1000, type=int, help="Number of checkpoints to use")
 @click.option("--compression", default=None, type=click.Choice([None, 'zfp', 'sz', 'blosc']),
@@ -42,15 +43,26 @@ plt.style.use("ggplot")
 @click.option("--tolerance", default=None, type=int, help="Error tolerance for lossy compression, used as 10^-t")
 @click.option("--reference-solution", default=None, type=str,
               help="Objective function history file for reference solution (to include in convergence plots)")
-def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nbl, kernel, scale_gradient, checkpointing,
-        n_checkpoints, compression, tolerance, reference_solution):
-    dtype = np.float32
-    water_depth = 22  # Number of points at the top of the domain that correspond to water
+@click.option("--dtype", default='float32', type=click.Choice(['float32', 'float64']),
+              help="Dtype to use in computation")
+def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nbl, kernel, scale_gradient, max_iter,
+        checkpointing, n_checkpoints, compression, tolerance, reference_solution, dtype):
+
+    if dtype == 'float32':
+        dtype = np.float32
+    elif dtype == 'float64':
+        dtype = np.float64
+    else:
+        raise ValueError("Invalid dtype")
+
+    water_depth = 20  # Number of points at the top of the domain that correspond to water
     exclude_boundaries = True  # Exclude the boundary regions from the optimisation problem
     mute_water = True  # Mute the gradient in the water region
 
+    initial_model_filename, datakey = initial_model_filename
+
     model, geometry, bounds = initial_setup(initial_model_filename, tn, dtype, so, nbl,
-                                            datakey="m0", exclude_boundaries=exclude_boundaries, water_depth=water_depth)
+                                            datakey=datakey, exclude_boundaries=exclude_boundaries, water_depth=water_depth)
 
     client = setup_dask()
 
@@ -67,15 +79,27 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     if not os.path.exists(progress_dir):
         os.mkdir(progress_dir)
 
-    solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
-                     'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl}
+    auth = default_auth()
 
-    solver = overthrust_solver_iso(**solver_params)
+    solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
+                     'space_order': so, 'dtype': dtype, 'datakey': datakey, 'nbl': nbl,
+                     'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000})}
+
+    if kernel in ['OT2', 'OT4']:
+        solver_params['kernel'] = kernel
+        solver = overthrust_solver_iso(**solver_params)
+    elif kernel == "rho":
+        solver_params['water_depth'] = water_depth
+        solver_params['calculate_density'] = False
+        solver = overthrust_solver_density(**solver_params)
     solver._dt = 1.75
     solver.geometry.resample(1.75)
 
-    f_args = [nshots, client, solver, shots_container, scale_gradient, mute_water, exclude_boundaries, water_depth]
+    f_args = [nshots, client, solver, shots_container, auth, scale_gradient, mute_water, exclude_boundaries, water_depth]
 
+    if checkpointing:
+        f_args += [checkpointing, {'n_checkpoints': n_checkpoints, 'scheme': compression,
+                                   'tolerance': tolerance}]
     if exclude_boundaries:
         v0 = mat2vec(trim_boundary(model.vp, model.nbl)).astype(np.float64)
     else:
@@ -105,13 +129,17 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     partial_callback = partial(callback, progress_dir, intermediates_dir, model, exclude_boundaries)
 
     fwi_gradient.call_count = 0
+    fwd_op = solver.op_fwd(save=False)
+    rev_op = solver.op_grad(save=False)
+    fwd_op.ccode
+    rev_op.ccode
 
     solution_object = minimize(fwi_gradient,
                                v0,
                                args=tuple(f_args),
                                jac=True, method='L-BFGS-B',
                                callback=partial_callback, bounds=bounds,
-                               options={'disp': True, 'maxiter': 30})
+                               options={'disp': True, 'maxiter': max_iter})
 
     if exclude_boundaries:
         final_model = vec2mat(solution_object.x, model.shape)
@@ -206,7 +234,7 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0", exclude_b
     return model, geometry, b
 
 
-def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=None, mute_water=True,
+def fwi_gradient(vp_in, nshots, client, solver, shots_container, auth, scale_gradient=None, mute_water=True,
                  exclude_boundaries=True, water_depth=20, checkpointing=False, checkpoint_params=None):
     start_time = time.time()
 
@@ -229,10 +257,10 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
 
     for i in range(nshots):
         if checkpointing:
-            futures.append(client.submit(process_shot_checkpointed, i, f_solver, shots_container, exclude_boundaries,
+            futures.append(client.submit(process_shot_checkpointed, i, f_solver, shots_container, auth, exclude_boundaries,
                                          checkpoint_params, resources={'tasks': 1}))
         else:
-            futures.append(client.submit(process_shot, i, f_solver, shots_container, exclude_boundaries,
+            futures.append(client.submit(process_shot, i, f_solver, shots_container, auth, exclude_boundaries,
                                          resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
 
     if exclude_boundaries:

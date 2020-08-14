@@ -20,7 +20,7 @@ def setup_dask():
 
     server_address = os.environ['DASK_SERVER_IP']
     client = Client('%s:8786' % server_address)
-
+    reset_cluster(client)
     return client
 
 
