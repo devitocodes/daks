@@ -2,7 +2,7 @@ import numpy as np
 import click
 from fwi.overthrust import overthrust_model_density, overthrust_solver_density, overthrust_solver_iso
 from azureio import create_container
-from fwi.io import save_shot, Blob
+from fwi.io import save_shot, Blob, default_auth
 from distributed import wait
 from fwi.dasksetup import setup_dask
 
@@ -26,14 +26,17 @@ def run(model_filename, tn, nshots, so, nbl, shots_container, kernel, dtype):
     else:
         raise ValueError("Invalid dtype")
 
-    model = overthrust_model_density(Blob("models", model_filename), datakey="m", dtype=dtype, space_order=so, nbl=nbl)
+    auth = default_auth()
 
-    create_container(shots_container)
+    model = overthrust_model_density(Blob("models", model_filename, auth=auth), datakey="m", dtype=dtype, space_order=so,
+                                     nbl=nbl)
+
+    create_container(shots_container, auth=auth)
 
     client = setup_dask()
 
     solver_params = {'tn': tn, 'space_order': so, 'dtype': dtype, 'datakey': 'm', 'nbl': nbl, 'water_depth': 20,
-                     'calculate_density': True, 'kernel': kernel, 'h5_file': Blob("models", model_filename)}
+                     'calculate_density': True, 'kernel': kernel, 'h5_file': Blob("models", model_filename, auth=auth)}
 
     src_coords = get_source_locations(model, nshots, dtype)
 
@@ -42,7 +45,7 @@ def run(model_filename, tn, nshots, so, nbl, shots_container, kernel, dtype):
     futures = []
     for i in range(nshots):
         futures.append(client.submit(generate_shot, (i, src_coords[i]),
-                                     solver_params=solver_params, container=shots_container,
+                                     solver_params=solver_params, container=shots_container, auth=auth,
                                      resources={'tasks': 1}))
 
     wait(futures)
@@ -65,7 +68,7 @@ def get_source_locations(model, nshots, dtype):
     return src_coords
 
 
-def generate_shot(shot_info, solver_params, container):
+def generate_shot(shot_info, solver_params, container, auth):
     shot_id, src_coords = shot_info
     solver_params['src_coordinates'] = src_coords
 
@@ -83,7 +86,7 @@ def generate_shot(shot_info, solver_params, container):
 
     rec, u, _ = solver.forward(dt=1.75)  # solver.model.critical_dt)
 
-    save_shot(shot_id, rec.data, src_coords, solver.geometry.dt, container=container)
+    save_shot(shot_id, rec.data, src_coords, solver.geometry.dt, auth=auth, container=container)
     return True
 
 

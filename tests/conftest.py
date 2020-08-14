@@ -1,17 +1,14 @@
-import os
 import pytest
 import numpy as np
 
-from fwi.io import BlobAuth, Blob
+from fwi.io import Blob, default_auth
 from fwi.overthrust import overthrust_solver_iso
 from fwi.dasksetup import setup_dask
 
 
 @pytest.fixture
 def auth():
-    account_name = os.environ['BLOB_ACCOUNT_NAME']
-    account_key = os.environ['BLOB_ACCOUNT_KEY']
-    return BlobAuth(account_name, account_key)
+    return default_auth()
 
 
 @pytest.fixture

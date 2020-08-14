@@ -29,7 +29,4 @@ jobs:
     - name: Run scripts
       run: |
         export PYTHONPATH=$PYTHONPATH:$PWD
-        python generate_shot_data.py
-        make overthrust_3D_initial_model_2D.h5
-        python fwi.py
-        python tests/test_gradient.py
+        make fwi

@@ -1,5 +1,6 @@
-import io
 import h5py
+import io
+import os
 
 from fwi.azureio import blob_from_bytes, load_blob_to_hdf5
 
@@ -29,6 +30,12 @@ def load_model(model_name, datakey, auth):
     with load_blob_to_hdf5(Blob("models", model_name, auth=auth)) as f:
         data = f[datakey][()]
     return data
+
+
+def default_auth():
+    account_name = os.environ['BLOB_ACCOUNT_NAME']
+    account_key = os.environ['BLOB_ACCOUNT_KEY']
+    return BlobAuth(account_name, account_key)
 
 
 class BlobAuth(object):

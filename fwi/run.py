@@ -14,7 +14,7 @@ from functools import partial
 from scipy.optimize import minimize, Bounds
 
 from fwi.dasksetup import setup_dask, reset_cluster
-from fwi.io import Blob
+from fwi.io import Blob, default_auth
 from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso, overthrust_solver_density
 from fwi.shotprocessors import process_shot, process_shot_checkpointed
 from util import trim_boundary, mat2vec, vec2mat, write_results, to_hdf5, plot_model_to_file, eprint
@@ -29,7 +29,7 @@ plt.style.use("ggplot")
 @click.option("--results-dir", default="fwiresults", help="Directory for results")
 @click.option("--tn", default=4000, type=int, help="Number of timesteps to run")
 @click.option("--nshots", default=20, type=int, help="Number of shots (already decided when generating shots)")
-@click.option("--shots-container", default="shots-iso", type=str, help="Name of container to read shots from")
+@click.option("--shots-container", default="shots", type=str, help="Name of container to read shots from")
 @click.option("--so", default=6, type=int, help="Spatial discretisation order")
 @click.option("--nbl", default=40, type=int, help="Number of absorbing boundary layers to add to the model")
 @click.option("--kernel", default="OT2", help="Computational kernel to use", type=click.Choice(['OT2', 'OT4', 'rho']))
@@ -79,7 +79,9 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     if not os.path.exists(progress_dir):
         os.mkdir(progress_dir)
 
-    solver_params = {'h5_file': Blob("models", initial_model_filename), 'tn': tn,
+    auth = default_auth()
+
+    solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
                      'space_order': so, 'dtype': dtype, 'datakey': datakey, 'nbl': nbl,
                      'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000})}
 
@@ -93,7 +95,7 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     solver._dt = 1.75
     solver.geometry.resample(1.75)
 
-    f_args = [nshots, client, solver, shots_container, scale_gradient, mute_water, exclude_boundaries, water_depth]
+    f_args = [nshots, client, solver, shots_container, auth, scale_gradient, mute_water, exclude_boundaries, water_depth]
 
     if checkpointing:
         f_args += [checkpointing, {'n_checkpoints': n_checkpoints, 'scheme': compression,
@@ -232,7 +234,7 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0", exclude_b
     return model, geometry, b
 
 
-def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=None, mute_water=True,
+def fwi_gradient(vp_in, nshots, client, solver, shots_container, auth, scale_gradient=None, mute_water=True,
                  exclude_boundaries=True, water_depth=20, checkpointing=False, checkpoint_params=None):
     start_time = time.time()
 
@@ -255,10 +257,10 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, scale_gradient=
 
     for i in range(nshots):
         if checkpointing:
-            futures.append(client.submit(process_shot_checkpointed, i, f_solver, shots_container, exclude_boundaries,
+            futures.append(client.submit(process_shot_checkpointed, i, f_solver, shots_container, auth, exclude_boundaries,
                                          checkpoint_params, resources={'tasks': 1}))
         else:
-            futures.append(client.submit(process_shot, i, f_solver, shots_container, exclude_boundaries,
+            futures.append(client.submit(process_shot, i, f_solver, shots_container, auth, exclude_boundaries,
                                          resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
 
     if exclude_boundaries:
