@@ -24,7 +24,7 @@ jobs:
         docker push navjotk/daks_test:latest
         
     - name: Test with pytest
-      run: env > env_file && docker run --env-file env_file navjotk/daks_test:latest py.test -svx tests/
+      run: docker run  -e DASK_SERVER_IP=$DASK_SERVER_IP -e BLOB_ACCOUNT_NAME=$BLOB_ACCOUNT_NAME -e BLOB_ACCOUNT_KEY=$BLOB_ACCOUNT_KEY navjotk/daks_test:latest env && py.test -svx tests/
     
     - name: Run scripts
       run: |
