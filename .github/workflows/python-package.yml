@@ -20,7 +20,7 @@ jobs:
       run: docker build -f kubernetes/Dockerfile -t devitocodes/daks:latest .
     
     - name: Test with pytest
-      run: docker run devitocodes/daks:latest pytest -svx tests/*
+      run: env > env_file && docker run --env-file env_file devitocodes/daks:latest py.test -svx tests/
     
     - name: Run scripts
       run: |
