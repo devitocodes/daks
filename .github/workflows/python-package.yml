@@ -27,6 +27,4 @@ jobs:
       run: docker run  -e DASK_SERVER_IP=$DASK_SERVER_IP -e BLOB_ACCOUNT_NAME=$BLOB_ACCOUNT_NAME -e BLOB_ACCOUNT_KEY=$BLOB_ACCOUNT_KEY navjotk/daks_test:latest py.test -svx tests/
     
     - name: Run scripts
-      run: |
-        export PYTHONPATH=$PYTHONPATH:$PWD
-        make fwi
+      run: docker run  -e DASK_SERVER_IP=$DASK_SERVER_IP -e BLOB_ACCOUNT_NAME=$BLOB_ACCOUNT_NAME -e BLOB_ACCOUNT_KEY=$BLOB_ACCOUNT_KEY navjotk/daks_test:latest make fwi
