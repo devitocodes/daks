@@ -14,19 +14,6 @@ from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as
 class TestGradient(object):
 
     def test_gradientFWI(self, auth):
-        """
-        This test ensures that the FWI gradient computed with devito
-        satisfies the Taylor expansion property:
-        .. math::
-            \Phi(m0 + h dm) = \Phi(m0) + \O(h) \\
-            \Phi(m0 + h dm) = \Phi(m0) + h \nabla \Phi(m0) + \O(h^2) \\
-            \Phi(m0) = .5* || F(m0 + h dm) - D ||_2^2
-        where
-        .. math::
-            \nabla \Phi(m0) = <J^T \delta d, dm> \\
-            \delta d = F(m0+ h dm) - D \\
-        with F the Forward modelling operator.
-        """
         true_model_filename = "overthrust_3D_true_model_2D.h5"
         initial_model_filename = "overthrust_3D_initial_model_2D.h5"
         tn = 4000
