@@ -27,10 +27,10 @@ def process_shot(i, solver, shots_container, auth, exclude_boundaries=True, dt=N
     rec0, u0, _ = solver.forward(save=True, dt=dt)
 
     residual = Receiver(name='rec', grid=solver.model.grid, data=rec0.data - rec,
-                        time_range=solver.geometry.time_axis,
+                        time_range=solver.geometry.time_axis, dtype=solver.model.dtype,
                         coordinates=solver.geometry.rec_positions)
 
-    objective = .5*np.linalg.norm(residual.data.ravel())**2
+    objective = (.5*np.linalg.norm(residual.data.ravel())**2).astype(solver.model.dtype)
 
     grad, _ = solver.gradient(residual, u=u0, dt=dt)
 
