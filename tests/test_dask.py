@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from distributed import wait
 
@@ -19,10 +20,55 @@ def test_dask_upload(client):
     assert(result)
 
 
+@pytest.mark.skip(reason="Platforms don't always match")
+def test_dask_configuration(solver, client):
+
+    def get_configuration():
+        from devito import configuration
+        return str(configuration)
+
+    config_future = client.submit(get_configuration)
+
+    wait(config_future)
+
+    config_remote = config_future.result()
+    print("Remote")
+    print(config_remote)
+    print("Local")
+    print(get_configuration())
+    assert(config_remote == get_configuration())
+
+
+@pytest.mark.skip(reason="Sonames are different if platforms are different")
+def test_dask_soname(solver, client):
+    op = solver.op_fwd()
+
+    def soname(op):
+        return op._soname
+
+    # Force local JITing
+    rec1, u1, _ = solver.forward()
+
+    soname_future = client.submit(soname, op)
+
+    wait(soname_future)
+
+    soname_remote = soname_future.result()
+
+    assert(soname_remote == op._soname)
+
+
 def test_dask_pickling(solver, client):
 
     def noop_function(x):
         return x
+    # Important that the solver is sent before being JITed
+    # See above skipped test for reason
+    solver_future = client.submit(noop_function, solver)
+
+    wait(solver_future)
+
+    solver2 = solver_future.result()
 
     rec1, u1, _ = solver.forward()
     rec_future = client.submit(noop_function, rec1)
@@ -39,12 +85,6 @@ def test_dask_pickling(solver, client):
     u2 = u_future.result()
 
     assert(np.allclose(u1.data, u2.data, atol=0., rtol=0.))
-
-    solver_future = client.submit(noop_function, solver)
-
-    wait(solver_future)
-
-    solver2 = solver_future.result()
 
     assert(solver2.model.shape == solver.model.shape)
     assert(solver2.model.nbl == solver.model.nbl)
