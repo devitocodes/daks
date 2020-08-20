@@ -120,5 +120,5 @@ def test_remote_devito(solver, client):
     error_u = u1.data - u2.data
     rel_u = error_u/u1.data
     print("u", np.min(error_u), np.max(error_u), np.min(rel_u), np.max(rel_u))
-    assert(np.allclose(rec1.data, rec2.data, atol=1e-7, rtol=1e-6))
-    assert(np.allclose(u1.data, u2.data, atol=1e-7, rtol=1e-6))
+    assert(np.allclose(rec1.data, rec2.data, atol=1e-7, rtol=1e-5))
+    assert(np.allclose(u1.data, u2.data, atol=1e-7, rtol=1e-5))
