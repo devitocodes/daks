@@ -113,5 +113,5 @@ def test_remote_devito(solver, client):
     rec2, u2, _ = future.result()
     print(np.linalg.norm(rec1.data))
     print(np.linalg.norm(rec2.data))
-    assert(np.allclose(rec1.data, rec2.data, atol=0., rtol=0.))
-    assert(np.allclose(u1.data, u2.data, atol=0., rtol=0.))
+    assert(np.allclose(rec1.data, rec2.data, atol=1e-7, rtol=0.))
+    assert(np.allclose(u1.data, u2.data, atol=1e-7, rtol=0.))
