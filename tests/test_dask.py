@@ -115,8 +115,10 @@ def test_remote_devito(solver, client):
     print(np.linalg.norm(rec2.data))
     print(np.linalg.norm(u1.data), np.linalg.norm(u2.data))
     error_rec = rec1.data - rec2.data
-    print("rec", np.min(error_rec), np.max(error_rec))
+    rel_rec = error_rec/rec1.data
+    print("rec", np.min(error_rec), np.max(error_rec), np.min(rel_rec), np.max(rel_rec))
     error_u = u1.data - u2.data
-    print("u", np.min(error_u), np.max(error_u))
+    rel_u = error_u/u1.data
+    print("u", np.min(error_u), np.max(error_u), np.min(rel_u), np.max(rel_u))
     assert(np.allclose(rec1.data, rec2.data, atol=1e-7, rtol=1e-6))
     assert(np.allclose(u1.data, u2.data, atol=1e-7, rtol=1e-6))
