@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ master ]
 env:
-  DASK_SERVER_IP: 52.190.25.183
+  DASK_SERVER_IP: ${{ secrets.DASK_SERVER_IP }}
   BLOB_ACCOUNT_NAME: ${{ secrets.BLOB_ACCOUNT_NAME }}
   BLOB_ACCOUNT_KEY: ${{ secrets.BLOB_ACCOUNT_KEY }}
 jobs:

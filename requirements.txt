@@ -3,7 +3,7 @@ tqdm
 bokeh
 azure-storage-blob==2.1.0 
 devito
-dask
+dask==2.22.0
 distributed
 numpy
 cloudpickle

@@ -251,7 +251,7 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, auth, scale_gra
     solver.model.update("vp", vp)
 
     # Dask enforces this for large objects
-    f_solver = client.scatter(solver, broadcast=True)
+    f_solver = client.scatter(solver, broadcast=False)
 
     futures = []
 

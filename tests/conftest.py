@@ -15,7 +15,7 @@ def auth():
 def model():
     initial_model_filename = "overthrust_3D_initial_model_2D.h5"
     datakey = "m0"
-    return "%s:%s" % (initial_model_filename, datakey)
+    return initial_model_filename, datakey
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def nbl():
 
 @pytest.fixture
 def solver_params(model, auth, tn, so, dtype, nbl):
-    initial_model_filename, datakey = model.split(":")
+    initial_model_filename, datakey = model
     return {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
             'space_order': so, 'dtype': dtype, 'datakey': datakey, 'nbl': nbl,
             'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000})}
