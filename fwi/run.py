@@ -15,7 +15,7 @@ from scipy.optimize import minimize, Bounds
 
 from fwi.dasksetup import setup_dask, reset_cluster
 from fwi.io import Blob, default_auth
-from fwi.overthrust import overthrust_model_iso, create_geometry, overthrust_solver_iso, overthrust_solver_density
+from fwi.overthrust import overthrust_model_iso, create_geometry
 from fwi.shotprocessors import process_shot, process_shot_checkpointed
 from util import trim_boundary, mat2vec, vec2mat, write_results, to_hdf5, plot_model_to_file, eprint
 
@@ -45,8 +45,10 @@ plt.style.use("ggplot")
               help="Objective function history file for reference solution (to include in convergence plots)")
 @click.option("--dtype", default='float32', type=click.Choice(['float32', 'float64']),
               help="Dtype to use in computation")
+@click.option("--dt", default=None, type=float,
+              help="Use constant dt as provided (default: calculate maximum acceptable dt at every iteration)")
 def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nbl, kernel, scale_gradient, max_iter,
-        checkpointing, n_checkpoints, compression, tolerance, reference_solution, dtype):
+        checkpointing, n_checkpoints, compression, tolerance, reference_solution, dtype, dt):
 
     if dtype == 'float32':
         dtype = np.float32
@@ -83,19 +85,14 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
 
     solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
                      'space_order': so, 'dtype': dtype, 'datakey': datakey, 'nbl': nbl,
-                     'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000})}
+                     'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000}), 'kernel': kernel}
 
-    if kernel in ['OT2', 'OT4']:
-        solver_params['kernel'] = kernel
-        solver = overthrust_solver_iso(**solver_params)
-    elif kernel == "rho":
+    if kernel == "rho":
         solver_params['water_depth'] = water_depth
         solver_params['calculate_density'] = False
-        solver = overthrust_solver_density(**solver_params)
-    solver._dt = 1.75
-    solver.geometry.resample(1.75)
 
-    f_args = [nshots, client, solver, shots_container, auth, scale_gradient, mute_water, exclude_boundaries, water_depth]
+    f_args = [nshots, client, model, solver_params, shots_container, auth, scale_gradient, mute_water, exclude_boundaries,
+              water_depth, dt]
 
     if checkpointing:
         f_args += [checkpointing, {'n_checkpoints': n_checkpoints, 'scheme': compression,
@@ -122,17 +119,13 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
             to_hdf5(vec2mat(vec, model.vp.shape), filename)
 
         progress_filename = os.path.join(progress_dir, "fwi-iter%d.pdf" % (fwi_iteration))
-        plot_model_to_file(solver.model, progress_filename)
+        plot_model_to_file(model, progress_filename)
 
     callback.call_count = 0
 
     partial_callback = partial(callback, progress_dir, intermediates_dir, model, exclude_boundaries)
 
     fwi_gradient.call_count = 0
-    fwd_op = solver.op_fwd(save=False)
-    rev_op = solver.op_grad(save=False)
-    fwd_op.ccode
-    rev_op.ccode
 
     solution_object = minimize(fwi_gradient,
                                v0,
@@ -146,11 +139,11 @@ def run(initial_model_filename, results_dir, tn, nshots, shots_container, so, nb
     else:
         final_model = vec2mat(solution_object.x, model.vp.shape)
 
-    solver.model.update("vp", final_model)
+    model.update("vp", final_model)
 
     # Save plot of final model
     final_plot_filename = os.path.join(results_dir, "final_model.pdf")
-    plot_model_to_file(solver.model, final_plot_filename)
+    plot_model_to_file(model, final_plot_filename)
 
     # Save objective function values to CSV
     obj_fn_history = callback.obj_fn_history
@@ -234,8 +227,8 @@ def initial_setup(filename, tn, dtype, space_order, nbl, datakey="m0", exclude_b
     return model, geometry, b
 
 
-def fwi_gradient(vp_in, nshots, client, solver, shots_container, auth, scale_gradient=None, mute_water=True,
-                 exclude_boundaries=True, water_depth=20, checkpointing=False, checkpoint_params=None):
+def fwi_gradient(vp_in, nshots, client, model, solver_params, shots_container, auth, scale_gradient=None, mute_water=True,
+                 exclude_boundaries=True, water_depth=20, dt=None, checkpointing=False, checkpoint_params=None):
     start_time = time.time()
 
     reset_cluster(client)
@@ -244,29 +237,29 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, auth, scale_gra
         fwi_gradient.obj_fn_cache = {}
 
     if exclude_boundaries:
-        vp = np.array(vec2mat(vp_in, solver.model.shape), dtype=solver.model.dtype)
+        vp = np.array(vec2mat(vp_in, model.shape), dtype=model.dtype)
     else:
-        vp = np.array(vec2mat(vp_in, solver.model.vp.shape), dtype=solver.model.dtype)
+        vp = np.array(vec2mat(vp_in, model.vp.shape), dtype=model.dtype)
 
-    solver.model.update("vp", vp)
+    model.update("vp", vp)
 
     # Dask enforces this for large objects
-    f_solver = client.scatter(solver, broadcast=True)
+    f_vp = client.scatter(vp, broadcast=True)
 
     futures = []
 
     for i in range(nshots):
         if checkpointing:
-            futures.append(client.submit(process_shot_checkpointed, i, f_solver, shots_container, auth, exclude_boundaries,
-                                         checkpoint_params, resources={'tasks': 1}))
+            futures.append(client.submit(process_shot_checkpointed, i, f_vp, solver_params, shots_container, auth,
+                                         exclude_boundaries, dt, checkpoint_params, resources={'tasks': 1}))
         else:
-            futures.append(client.submit(process_shot, i, f_solver, shots_container, auth, exclude_boundaries,
+            futures.append(client.submit(process_shot, i, f_vp, solver_params, shots_container, auth, exclude_boundaries, dt,
                                          resources={'tasks': 1}))  # Ensure one task per worker (to run two, tasks=0.5)
 
     if exclude_boundaries:
-        gradient_shape = solver.model.shape
+        gradient_shape = model.shape
     else:
-        gradient_shape = solver.model.vp.shape
+        gradient_shape = model.vp.shape
 
     def reduction(*args):
         grad = np.zeros(gradient_shape)  # Closured from above
@@ -288,7 +281,7 @@ def fwi_gradient(vp_in, nshots, client, solver, shots_container, auth, scale_gra
         if exclude_boundaries:
             muted_depth = water_depth
         else:
-            muted_depth = water_depth + solver.model.nbl
+            muted_depth = water_depth + model.nbl
         grad[:, 0:muted_depth] = 0
 
     # Scipy LBFGS misbehaves if type is not float64

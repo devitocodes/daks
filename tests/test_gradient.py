@@ -21,6 +21,7 @@ class TestGradient(object):
         so = 16
         nbl = 40
         shot_id = 20
+        dt = 1.75
         shots_container = "shots-iso-40-nbl-40-so-16"
         model0 = overthrust_model_iso(Blob("models", initial_model_filename, auth=auth), datakey="m0",
                                       dtype=dtype, space_order=so, nbl=nbl)
@@ -31,7 +32,7 @@ class TestGradient(object):
         rec, source_location, _ = load_shot(shot_id, auth, container=shots_container)
         solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
                          'space_order': so, 'dtype': dtype, 'datakey': 'm0',
-                         'nbl': nbl,
+                         'nbl': nbl, 'kernel': 'OT2',
                          'src_coordinates': source_location}
         solver = overthrust_solver_iso(**solver_params)
 
@@ -39,7 +40,7 @@ class TestGradient(object):
         v0 = model0.vp
         dm = np.float64(v**(-2) - v0.data**(-2))
 
-        F0, gradient = process_shot(shot_id, solver, shots_container, auth, exclude_boundaries=False)
+        F0, gradient = process_shot(shot_id, v0.data, solver_params, shots_container, auth, exclude_boundaries=False, dt=dt)
 
         basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
 

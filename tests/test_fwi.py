@@ -112,17 +112,14 @@ def test_equivalence_shot_checkpointing(shots_container, auth):
     shot_id = 1
 
     solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
-                     'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl,
+                     'space_order': so, 'dtype': dtype, 'datakey': 'm0', 'nbl': nbl, 'kernel': 'OT2',
                      'opt': ('noop', {'openmp': True, 'par-dynamic-work': 1000})}
-
-    solver1 = overthrust_solver_iso(**solver_params)
-    solver2 = overthrust_solver_iso(**solver_params)
 
     model, geometry, _ = initial_setup(Blob("models", initial_model_filename, auth=auth), tn, dtype, so, nbl,
                                        datakey="m0", exclude_boundaries=exclude_boundaries,
                                        water_depth=water_depth)
-    o2, grad2 = process_shot(shot_id, solver1, shots_container, auth, exclude_boundaries)
-    o1, grad1 = process_shot_checkpointed(shot_id, solver2, shots_container, auth, exclude_boundaries)
+    o2, grad2 = process_shot(shot_id, model.vp.data, solver_params, shots_container, auth, exclude_boundaries)
+    o1, grad1 = process_shot_checkpointed(shot_id, model.vp.data, solver_params, shots_container, auth, exclude_boundaries)
 
     np.testing.assert_approx_equal(o1, o2, significant=5)
     assert(np.allclose(grad1, grad2, rtol=1e-4))
