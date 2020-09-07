@@ -60,7 +60,7 @@ do
     fi
 done
 sleep 30
-docker-compose run -e DASK_SERVER_IP=$DASK_IP -w /app/daks daks /venv/bin/python -u fwi/run.py --results-dir $DIRNAME $PARAMS 2>&1 | tee $DIRNAME/output.txt
+docker-compose run -e DASK_SERVER_IP=$DASK_IP -e BLOB_ACCOUNT_NAME=$BLOB_ACCOUNT_NAME -e BLOB_ACCOUNT_KEY=$BLOB_ACCOUNT_KEY -w /app/daks daks /venv/bin/python -u fwi/run.py --results-dir $DIRNAME $PARAMS 2>&1 | tee $DIRNAME/output.txt
 
 echo All done. Deleting resources
 
