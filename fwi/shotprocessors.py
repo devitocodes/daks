@@ -29,7 +29,6 @@ def process_shot(i, vp, solver_params, shots_container, auth, exclude_boundaries
     if dt is None:
         dt = solver.model.critical_dt
 
-    solver._dt = dt
     solver.geometry.resample(dt)
 
     # TODO: Change to built-in

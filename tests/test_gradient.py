@@ -7,7 +7,7 @@ from examples.seismic import Receiver
 from fwi.overthrust import overthrust_solver_iso, overthrust_model_iso
 from fwi.shotprocessors import process_shot
 from fwi.io import load_shot, Blob
-from util import mat2vec
+from util import mat2vec, reinterpolate
 from examples.seismic.acoustic.acoustic_example import smooth, acoustic_setup as setup
 
 
@@ -29,7 +29,7 @@ class TestGradient(object):
         model_t = overthrust_model_iso(Blob("models", true_model_filename, auth=auth), datakey="m",
                                        dtype=dtype, space_order=so, nbl=nbl)
 
-        rec, source_location, _ = load_shot(shot_id, auth, container=shots_container)
+        rec_data, source_location, old_dt = load_shot(shot_id, auth, container=shots_container)
         solver_params = {'h5_file': Blob("models", initial_model_filename, auth=auth), 'tn': tn,
                          'space_order': so, 'dtype': dtype, 'datakey': 'm0',
                          'nbl': nbl, 'kernel': 'OT2',
@@ -41,8 +41,8 @@ class TestGradient(object):
         dm = np.float64(v**(-2) - v0.data**(-2))
 
         F0, gradient = process_shot(shot_id, v0.data, solver_params, shots_container, auth, exclude_boundaries=False, dt=dt)
-
-        basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm)
+        rec = reinterpolate(rec_data, solver.geometry.nt, old_dt)
+        basic_gradient_test(solver, so, v0.data, v, rec, F0, gradient, dm, dt)
 
 
 def from_scratch_gradient_test(shape=(70, 70), kernel='OT2', space_order=6):
@@ -72,10 +72,10 @@ def from_scratch_gradient_test(shape=(70, 70), kernel='OT2', space_order=6):
 
     gradient, _ = wave.jacobian_adjoint(residual, u0, vp=v0)
     v0 = v0.data
-    basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm)
+    basic_gradient_test(wave, space_order, v0, v, rec.data, F0, gradient, dm)
 
 
-def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm):
+def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm, dt):
 
     G = np.dot(mat2vec(gradient.data), dm.reshape(-1))
 
@@ -91,9 +91,9 @@ def basic_gradient_test(wave, space_order, v0, v, rec, F0, gradient, dm):
         vloc = Function(name='vloc', grid=wave.model.grid, space_order=space_order,
                         initializer=initializer)
         # Data for the new model
-        d = wave.forward(vp=vloc, dt=wave.model.critical_dt)[0]
+        d = wave.forward(vp=vloc, dt=dt)[0]
         # First order error Phi(m0+dm) - Phi(m0)
-        F_i = .5*linalg.norm((d.data - rec.data).reshape(-1))**2
+        F_i = .5*linalg.norm((d.data - rec).reshape(-1))**2
         error1[i] = np.absolute(F_i - F0)
         # Second order term r Phi(m0+dm) - Phi(m0) - <J(m0)^T \delta d, dm>
         error2[i] = np.absolute(F_i - F0 - H[i] * G)
